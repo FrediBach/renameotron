@@ -8,6 +8,8 @@ import { PatternInput } from '@/components/PatternInput'
 import { MatchedFilename } from '@/components/MatchedFilename'
 import { HighlightedText } from '@/components/HighlightedText'
 import { FileMetadataDialog } from '@/components/FileMetadataDialog'
+import { MetadataPatternBuilder } from '@/components/MetadataPatternBuilder'
+import { MODIFIER_DEFINITIONS } from '@/lib/metadata-modifiers'
 import { compileHighlightRegex } from '@/lib/match-highlights'
 import { captureLabel, tokenizeRegex } from '@/lib/pattern-highlights'
 import { buildRenamePlan, formatBytes, TOKEN_DEFINITIONS, type FileEntry } from '@/lib/rename'
@@ -47,7 +49,7 @@ export default function App() {
   const [notice, setNotice] = useState<{ message: string; error?: boolean } | null>(null)
   const [filter, setFilter] = useState<'all' | 'matched'>('all')
   const [search, setSearch] = useState('')
-  const [modal, setModal] = useState<'templates' | 'guide' | 'confirm' | 'history' | 'save' | 'metadata' | null>(null)
+  const [modal, setModal] = useState<'templates' | 'guide' | 'confirm' | 'history' | 'save' | 'metadata' | 'modifiers' | null>(null)
   const [inspectedFileId, setInspectedFileId] = useState<string | null>(null)
   const metadataOpener = useRef<HTMLButtonElement | null>(null)
   const replacementInput = useRef<HTMLInputElement>(null)
@@ -207,8 +209,8 @@ export default function App() {
             <div className="step-connector"><ArrowDown size={15} /></div>
             <div className="rule-step"><div className="step-label"><span className="step-number">02</span><label htmlFor="replacement-pattern">Give it a new name</label></div>
               <PatternInput id="replacement-pattern" inputRef={replacementInput} value={replacement} onChange={value => { setReplacement(value); setActiveTemplate('Custom rule') }} kind="replacement" captureGroups={captureGroups} placeholder="e.g. photo-{index:3}.{ext}" />
-              <p className="field-hint">Add text, capture groups, or a little metadata.</p>
-              <div className="token-chips">{['{name}', '{ext}', '{index:3}'].map(token => <button key={token} className={`metadata-token-chip hl-token-${token.slice(1, -1).split(':')[0]}`} onClick={() => { setReplacement(current => current + token); setActiveTemplate('Custom rule') }}>{token}</button>)}<button className={showTokens ? 'token-more active' : 'token-more'} onClick={() => setShowTokens(!showTokens)} aria-label="More metadata tokens" aria-expanded={showTokens}><Plus size={13} /></button></div>
+              <p className="field-hint">Add text or metadata. Type <code>|</code> inside a token to chain modifiers.</p>
+              <div className="token-chips">{['{name}', '{ext}', '{index:3}'].map(token => <button key={token} className={`metadata-token-chip hl-token-${token.slice(1, -1).split(':')[0]}`} onClick={() => { setReplacement(current => current + token); setActiveTemplate('Custom rule') }}>{token}</button>)}<button className={showTokens ? 'token-more active' : 'token-more'} onClick={() => setShowTokens(!showTokens)} aria-label="More metadata tokens" aria-expanded={showTokens}><Plus size={13} /></button><button className="modifier-open" onClick={event => { metadataOpener.current = event.currentTarget; focusReplacement.current = false; setModal('modifiers') }}><SlidersHorizontal size={12} />Modifiers</button></div>
               {showTokens && <div className="token-browser">{TOKEN_DEFINITIONS.map(token => <button key={token.key} onClick={() => { setReplacement(current => current + token.example); setActiveTemplate('Custom rule') }}><code>{token.example}</code><span>{token.label}</span></button>)}</div>}
               <div className="subfolder-tip"><Folder size={13} /><p>Use <code>/</code> to put files in a new subfolder.</p></div>
             </div>
@@ -282,9 +284,30 @@ export default function App() {
       }}
     />
 
+    <Dialog open={modal === 'modifiers'} onOpenChange={open => !open && setModal(null)}>
+      <DialogContent className="modifier-dialog" onCloseAutoFocus={event => {
+        event.preventDefault()
+        if (focusReplacement.current) {
+          const input = replacementInput.current
+          input?.focus()
+          input?.setSelectionRange(input.value.length, input.value.length)
+        } else metadataOpener.current?.focus()
+      }}>
+        <p className="eyebrow">A VALUE, YOUR WAY</p>
+        <DialogTitle>Metadata & modifiers</DialogTitle>
+        <DialogDescription>Format a value, combine transformations, and preview the result.</DialogDescription>
+        <MetadataPatternBuilder file={plan.rows.find(row => row.status !== 'unmatched')?.file ?? files[0]} index={plan.matchedCount ? 1 : undefined} onInsert={token => {
+          setReplacement(current => current + token)
+          setActiveTemplate('Custom rule')
+          focusReplacement.current = true
+          setModal(null)
+        }} />
+      </DialogContent>
+    </Dialog>
+
     <Dialog open={modal === 'templates'} onOpenChange={open => !open && setModal(null)}><DialogContent className="templates-dialog"><p className="eyebrow">SKIP THE BLANK PAGE</p><DialogTitle>A rule for almost everything.</DialogTitle><DialogDescription>Thoughtful starting points. Pick one, then make it yours.</DialogDescription><div className="template-search"><Search size={16} /><input aria-label="Search templates" placeholder="Find a template…" value={templateSearch} onChange={event => setTemplateSearch(event.target.value)} /></div><div className="category-tabs">{templateCategories.map(category => <button className={category === templateCategory ? 'active' : ''} key={category} onClick={() => setTemplateCategory(category)}>{category}</button>)}</div><div className="template-grid">{shownTemplates.map(template => <button key={template.id} onClick={() => applyTemplate(template)}><div><WandSparkles size={19} /><ArrowUpRight size={15} /></div><h3>{template.name}</h3><p>{template.description}</p><code>{template.replacement}</code></button>)}{shownTemplates.length === 0 && <div className="template-empty">{templateCategory === 'Saved' ? 'Your saved naming rules will appear here.' : 'No templates found. Try another search.'}</div>}</div></DialogContent></Dialog>
 
-    <Dialog open={modal === 'guide'} onOpenChange={open => !open && setModal(null)}><DialogContent className="guide-dialog"><p className="eyebrow">A QUICK FIELD GUIDE</p><DialogTitle>A little logic. A lot of order.</DialogTitle><DialogDescription>Open a folder, write a rule, and check the preview. Only the Rename button changes your files.</DialogDescription><div className="guide-steps"><p><b>01</b><span><strong>Find what matters.</strong> Your regular expression matches the filename, including its extension. Use parentheses to capture a part you want to keep.</span></p><p><b>02</b><span><strong>Make it your own.</strong> Use <code>$1</code> for the first capture, or add metadata with <code>{'{…}'}</code>. Type <code>{'{'}</code> for suggestions.</span></p><p><b>03</b><span><strong>Review, then rename.</strong> Uncheck files to exclude them. Conflicts and missing metadata are flagged before anything changes.</span></p></div><div className="guide-example"><code>^IMG_(\d+)\.jpg$</code><ArrowDown size={15} /><code>photo-$1.{'{ext}'}</code><p>IMG_1042.jpg <ArrowRight size={12} /> photo-1042.jpg</p></div><h3>The useful little details</h3><div className="guide-tokens">{TOKEN_DEFINITIONS.map(token => <div key={token.key}><code>{token.example}</code><span>{token.description}</span></div>)}</div><p className="guide-note">Plain filenames stay in their current folder. Paths with <code>/</code> start at your selected folder. Photo metadata comes from embedded EXIF; modification dates come from the filesystem. Desktop Chrome or Edge is needed for local folder access. Native rename support varies; copy & delete is available as an explicit alternative.</p></DialogContent></Dialog>
+    <Dialog open={modal === 'guide'} onOpenChange={open => !open && setModal(null)}><DialogContent className="guide-dialog"><p className="eyebrow">A QUICK FIELD GUIDE</p><DialogTitle>A little logic. A lot of order.</DialogTitle><DialogDescription>Open a folder, write a rule, and check the preview. Only the Rename button changes your files.</DialogDescription><div className="guide-steps"><p><b>01</b><span><strong>Find what matters.</strong> Your regular expression matches the filename, including its extension. Use parentheses to capture a part you want to keep.</span></p><p><b>02</b><span><strong>Make it your own.</strong> Use <code>$1</code> for the first capture, or add metadata with <code>{'{…}'}</code>. Type <code>{'{'}</code> for suggestions.</span></p><p><b>03</b><span><strong>Review, then rename.</strong> Uncheck files to exclude them. Conflicts and missing metadata are flagged before anything changes.</span></p></div><div className="guide-example"><code>^IMG_(\d+)\.jpg$</code><ArrowDown size={15} /><code>photo-$1.{'{ext}'}</code><p>IMG_1042.jpg <ArrowRight size={12} /> photo-1042.jpg</p></div><h3>The useful little details</h3><div className="guide-tokens">{TOKEN_DEFINITIONS.map(token => <div key={token.key}><code>{token.example}</code><span>{token.description}</span></div>)}</div><h3>Make metadata your own</h3><p className="guide-note">Chain modifiers with <code>|</code> in the order they should run: <code>{'{name|trim|lower|whitespace("-")}'}</code>. Text arguments use quotes. The Modifiers builder lets you preview and reorder each step.</p><div className="guide-tokens">{MODIFIER_DEFINITIONS.map(modifier => <div key={modifier.key}><code>{modifier.example}</code><span>{modifier.description}</span></div>)}</div><p className="guide-note">Plain filenames stay in their current folder. Paths with <code>/</code> start at your selected folder. Photo metadata comes from embedded EXIF; modification dates come from the filesystem. Desktop Chrome or Edge is needed for local folder access. Native rename support varies; copy & delete is available as an explicit alternative.</p></DialogContent></Dialog>
 
     <Dialog open={modal === 'confirm'} onOpenChange={open => !open && setModal(null)}><DialogContent className="confirm-dialog"><span className="modal-symbol"><FolderOpen size={26} strokeWidth={1.5} /></span><DialogTitle>A new name for {plan.readyCount} files.</DialogTitle><DialogDescription>{demo ? 'This is a practice run with sample files. Your device’s files won’t be changed.' : `Apply the previewed names in “${directory.name}”. New subfolders will be created where needed.`}</DialogDescription><div className="confirmation-preview">{plan.rows.filter(row => row.status === 'ready').slice(0, 3).map(row => <div key={row.file.id}><span>{row.file.path}</span><ArrowRight size={13} /><strong>{row.targetPath}</strong></div>)}{plan.readyCount > 3 && <p>and {plan.readyCount - 3} more files</p>}</div>{!demo && <><fieldset className="method-choice"><legend>Rename method</legend><label><input type="radio" checked={method === 'native'} onChange={() => setMethod('native')} /><span><strong>Native rename</strong><small>Fast, without copying. Requires browser support.</small></span></label><label><input type="radio" checked={method === 'copy'} onChange={() => setMethod('copy')} /><span><strong>Copy & delete</strong><small>Copies each file, checks its size, then removes the original. Needs extra disk space; filesystem timestamps may change.</small></span></label></fieldset><p className="confirm-note">Batches can partially complete. Existing names are never intentionally overwritten. There is no automatic undo for local files; an activity receipt records every attempted change.</p></>}<div className="dialog-actions"><Button variant="outline" onClick={() => setModal(null)}>Keep editing</Button><Button onClick={() => void executeRename()} disabled={!canRename}>{demo ? 'Try the rename' : `Rename ${plan.readyCount} files`}<ArrowRight size={15} /></Button></div></DialogContent></Dialog>
 

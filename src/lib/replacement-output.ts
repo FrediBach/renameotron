@@ -1,4 +1,5 @@
 import { metadataHighlight, type HighlightSpan } from './highlight-types'
+import { scanMetadataTokens } from './metadata-pattern'
 import { captureLabel, tokenizeRegex } from './pattern-highlights'
 
 interface ExpandedReplacement {
@@ -11,19 +12,21 @@ type Highlight = Omit<HighlightSpan, 'start' | 'end'>
 /** Resolve metadata once, recording its origin before JavaScript substitutions. */
 export function expandReplacementMetadata(
   replacement: string,
-  resolve: (key: string, format: string | undefined) => string,
+  resolve: (key: string, format: string | undefined, modifiers: string[]) => string,
 ): ExpandedReplacement {
   let text = ''
   const metadata: HighlightSpan[] = []
   let cursor = 0
-  for (const match of replacement.matchAll(/\{([a-zA-Z][\w-]*)(?::([^{}]*))?\}/g)) {
-    text += replacement.slice(cursor, match.index)
+  for (const token of scanMetadataTokens(replacement, true)) {
+    if (token.error) throw new Error(token.error)
+    if (!token.complete) continue
+    text += replacement.slice(cursor, token.start)
     // Dollar signs in metadata must remain literal when String.replace runs.
-    const value = resolve(match[1], match[2]).split('$').join('$$')
+    const value = resolve(token.key, token.format, token.modifiers).split('$').join('$$')
     const start = text.length
     text += value
-    if (value) metadata.push({ ...metadataHighlight(match[1]), start, end: text.length })
-    cursor = match.index + match[0].length
+    if (value) metadata.push({ ...metadataHighlight(token.key), start, end: text.length })
+    cursor = token.end
   }
   text += replacement.slice(cursor)
   return { text, metadata }

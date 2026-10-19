@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildRenamePlan, type FileEntry, type RenameRow } from './rename'
 import { expandReplacementMetadata, getReplacementOutputHighlights } from './replacement-output'
 
@@ -12,6 +12,44 @@ function parts(row: RenameRow) {
     ...(token ? { token } : {}), ...(group ? { group } : {}),
   })) ?? []
 }
+
+describe('metadata expression expansion', () => {
+  it('resolves each complete token once with legacy formats and its ordered modifier chain', () => {
+    const resolve = vi.fn().mockReturnValueOnce('001x').mockReturnValueOnce('name')
+    expect(expandReplacementMetadata('{index:3|suffix("x")}-{name|trim|lower}', resolve).text).toBe('001x-name')
+    expect(resolve.mock.calls).toEqual([
+      ['index', '3', ['suffix("x")']],
+      ['name', undefined, ['trim', 'lower']],
+    ])
+  })
+
+  it('passes quoted delimiters literally and never expands metadata inside arguments or results', () => {
+    const resolve = vi.fn(() => '$1-$&-{ext}')
+    const expanded = expandReplacementMetadata('{name|replace("{ext}|a,b:c","$1-$&")}', resolve)
+    expect(resolve.mock.calls).toEqual([['name', undefined, ['replace("{ext}|a,b:c","$1-$&")']]])
+    const output = 'a.jpg'.replace(/^.+$/, expanded.text)
+    expect(output).toBe('$1-$&-{ext}')
+    expect(getReplacementOutputHighlights('a.jpg', /^.+$/, expanded, output)).toEqual([
+      { start: 0, end: output.length, kind: 'metadata', token: 'name', label: 'Metadata: name' },
+    ])
+  })
+
+  it('rejects broken modifier expressions before resolving their values', () => {
+    const resolve = vi.fn(() => 'value')
+    for (const replacement of ['{name|}', '{name|replace("{ext}","x"}', '{name|replace("{ext}', '{name|lower', '{name|replace({ext},"x")}']) {
+      expect(() => expandReplacementMetadata(replacement, resolve)).toThrow()
+    }
+    expect(resolve).not.toHaveBeenCalled()
+  })
+
+  it('leaves ordinary unmatched braces unchanged', () => {
+    const resolve = vi.fn(() => 'value')
+    for (const replacement of ['{', 'before {name', '{modified:YYYY-MM-DD', '{some literal words}', '{123}']) {
+      expect(expandReplacementMetadata(replacement, resolve)).toEqual({ text: replacement, metadata: [] })
+    }
+    expect(resolve).not.toHaveBeenCalled()
+  })
+})
 
 describe('replacement output highlights', () => {
   it('colors only inserted metadata even when literals have the identical value', () => {

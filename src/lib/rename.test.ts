@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildRenamePlan, formatBytes, getFileTokenDetails, type FileEntry } from './rename'
+import { buildRenamePlan, formatBytes, getFileTokenDetails, validateTokenFormat, type FileEntry } from './rename'
 import { TEMPLATES } from './templates'
 
 function file(name: string, overrides: Partial<FileEntry> = {}): FileEntry {
@@ -7,6 +7,16 @@ function file(name: string, overrides: Partial<FileEntry> = {}): FileEntry {
 }
 
 describe('file metadata details', () => {
+  it('validates token formats without a sample file', () => {
+    expect(() => validateTokenFormat('name', undefined)).not.toThrow()
+    expect(() => validateTokenFormat('index', '3')).not.toThrow()
+    expect(() => validateTokenFormat('modified', 'YYYY-MM-DD HH-mm-ss')).not.toThrow()
+    expect(() => validateTokenFormat('unknown', undefined)).toThrow('Unknown token')
+    expect(() => validateTokenFormat('name', '3')).toThrow('does not accept a format')
+    expect(() => validateTokenFormat('index', '13')).toThrow('from 1 to 12')
+    expect(() => validateTokenFormat('taken', 'invalid')).toThrow('Use YYYY')
+  })
+
   it('uses exactly the same token values as the rename preview, including dates and stable UUIDs', () => {
     const photo = file('photo.jpg', { metadata: { taken: '2026-10-12T10:24:35+02:00', camera: 'Camera $&', width: 6240, height: 4160 } })
     const details = getFileTokenDetails(photo, 1)
@@ -133,6 +143,63 @@ describe('buildRenamePlan', () => {
   it('reports unsupported tokens and formats', () => {
     for (const replacement of ['{unknown}.jpg', '{index:100}.jpg', '{index:no}.jpg', '{name:3}.jpg', '{modified:yy}.jpg']) {
       expect(buildRenamePlan([file('a.jpg')], '^.+$', replacement, '').rows[0].status).toBe('error')
+    }
+  })
+
+  it('chains metadata modifiers while preserving legacy index and date formats', () => {
+    const photo = file('  Summer Trip.JPG', { size: 2_400_000, metadata: { camera: '  My Camera  ' } })
+    const plan = buildRenamePlan([photo], '^.+$', '{index:3|prefix("photo-")}-{name|trim|slug}-{camera|trim|upper|replace(" ","-")}-{size|bytes|whitespace("-")}.{ext|lower}')
+    expect(plan.rows[0]).toMatchObject({ status: 'ready', targetPath: 'photo-001-summer-trip-MY-CAMERA-2.4-MB.jpg' })
+    expect(buildRenamePlan([photo], '^.+$', '{modified:YYYY-MM|replace("-", "_")}.jpg').rows[0].targetPath).toBe('2025_04.jpg')
+    expect(buildRenamePlan([photo], '^.+$', '{modified|date("HH-mm-ss")}.jpg').rows[0].targetPath).toBe('14-05-09.jpg')
+  })
+
+  it('calculates image metadata and shares exact values with the inspector', () => {
+    const photo = file('photo.jpg', { metadata: { width: 6240, height: 4160 } })
+    expect(buildRenamePlan([photo], '^.+$', '{dimensions}-{aspect}-{megapixels}MP-{orientation}.jpg').rows[0])
+      .toMatchObject({ status: 'ready', targetPath: '6240x4160-3x2-25.96MP-landscape.jpg' })
+    const details = getFileTokenDetails(photo)
+    expect(details.find(token => token.key === 'aspect')?.value).toBe('3x2')
+    expect(details.find(token => token.key === 'megapixels')?.value).toBe('25.96')
+    for (const [width, height, orientation, aspect] of [[100, 100, 'square', '1x1'], [300, 400, 'portrait', '3x4']] as const) {
+      const result = buildRenamePlan([file('photo.jpg', { metadata: { width, height } })], '^.+$', '{orientation}-{aspect}.jpg')
+      expect(result.rows[0].targetPath).toBe(`${orientation}-${aspect}.jpg`)
+    }
+  })
+
+  it('uses default values for unavailable metadata, then continues the modifier chain', () => {
+    const photo = file('README', { type: '', lastModified: NaN, metadata: { taken: 'invalid', width: 0, height: 100 } })
+    const result = buildRenamePlan([photo], '^.+$', '{camera|trim|default(" Unknown ")|trim|lower}-{type|mime|default("bin")}-{modified|date("YYYY")|default("undated")}-{taken|default("none")}-{aspect|default("unknown")}.{ext|default("txt")}')
+    expect(result.rows[0]).toMatchObject({ status: 'ready', targetPath: 'unknown-bin-undated-none-unknown.txt' })
+    for (const metadata of [{}, { width: 0, height: 100 }, { width: NaN, height: 100 }, { width: 100, height: 1.5 }]) {
+      const unavailable = file('photo.jpg', { metadata })
+      for (const token of ['aspect', 'dimensions', 'megapixels', 'orientation']) {
+        expect(buildRenamePlan([unavailable], '^.+$', `{${token}}.jpg`).rows[0].status).toBe('error')
+      }
+    }
+  })
+
+  it('never masks invalid tokens, modifiers, or formats with defaults', () => {
+    const photo = file('photo.jpg', { metadata: {} })
+    for (const replacement of [
+      '{unknown|default("ok")}.jpg', '{camera|unknown|default("ok")}.jpg', '{camera|default("ok")|unknown}.jpg',
+      '{taken:yy|default("ok")}.jpg', '{taken|date("invalid")|default("ok")}.jpg', '{name:3|default("ok")}.jpg',
+      '{index:100|default("ok")}.jpg', '{camera|replace("x")|default("ok")}.jpg',
+    ]) expect(buildRenamePlan([photo], '^.+$', replacement).rows[0].status).toBe('error')
+  })
+
+  it('keeps dollar substitutions and token-like text literal inside modifier outputs', () => {
+    const result = buildRenamePlan([file('a.jpg')], '^(.+)\\.jpg$', '{name|prefix("$&-{$1}-")|suffix("-$<name>")}.jpg')
+    // Angle brackets are rejected by portable path validation, but not interpreted as captures.
+    expect(result.rows[0].targetPath).toBe('$&-{$1}-a-$<name>.jpg')
+    expect(result.rows[0].status).toBe('error')
+    const safe = buildRenamePlan([file('a.jpg')], '^(.+)\\.jpg$', '{camera|default("$&-{$1}")}-{name|replace("a","$1")}.jpg')
+    expect(safe.rows[0]).toMatchObject({ status: 'ready', targetPath: '$&-{$1}-$1.jpg' })
+  })
+
+  it('continues to validate portable paths after modifiers', () => {
+    for (const expression of ['prefix("../")', 'suffix("?")', 'prefix("C:/")']) {
+      expect(buildRenamePlan([file('photo.jpg')], '^.+$', `{name|${expression}}.jpg`).rows[0].status).toBe('error')
     }
   })
 

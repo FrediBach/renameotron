@@ -1,4 +1,5 @@
 import { metadataHighlight, type CaptureGroup, type HighlightSpan } from './highlight-types'
+import { scanMetadataTokens } from './metadata-pattern'
 
 function decodedGroupName(name: string): string {
   return name.replace(/\\u(?:\{([\da-fA-F]+)\}|([\da-fA-F]{4}))/g, (original, braced: string | undefined, fixed: string | undefined) => {
@@ -79,13 +80,20 @@ export function captureLabel(group: CaptureGroup): string {
 /** Follow JavaScript's two-digit capture fallback ($12 can mean $1 + literal 2). */
 export function tokenizeReplacement(replacement: string, groups: CaptureGroup[]): HighlightSpan[] {
   const spans: HighlightSpan[] = []
-  const tokens = /\$\$|\$[&`']|\$\d{1,2}|\$<[^>]*>|\{[^{}]*\}?/g
-  for (const match of replacement.matchAll(tokens)) {
+  const metadata = scanMetadataTokens(replacement, true)
+  for (const token of metadata) {
+    const expression = replacement.slice(token.start + 1, token.complete ? token.end - 1 : token.end)
+    spans.push({ start: token.start, end: token.end, ...(token.key ? metadataHighlight(token.key) : { kind: 'metadata' as const }), label: `Metadata: ${expression}` })
+  }
+  const tokens = /\$\$|\$[&`']|\$\d{1,2}|\$<[^>]*>/g
+  let metadataIndex = 0
+  for (let match = tokens.exec(replacement); match; match = tokens.exec(replacement)) {
     const token = match[0]
     const start = match.index
-    if (token.startsWith('{')) {
-      const key = token.match(/^\{([a-zA-Z][\w-]*)/)?.[1]
-      spans.push({ start, end: start + token.length, ...(key ? metadataHighlight(key) : { kind: 'metadata' as const }), label: `Metadata: ${token.replace(/[{}]/g, '')}` })
+    while (metadata[metadataIndex]?.end <= start) metadataIndex++
+    // Replacement syntax in a modifier argument belongs to the metadata token.
+    if (metadata[metadataIndex] && start + token.length > metadata[metadataIndex].start) {
+      tokens.lastIndex = metadata[metadataIndex].end
       continue
     }
     if (token === '$&') {
@@ -109,5 +117,5 @@ export function tokenizeReplacement(replacement: string, groups: CaptureGroup[])
     }
     if (group) spans.push({ start, end: start + length, kind: 'group', group: group.index, label: captureLabel(group) })
   }
-  return spans
+  return spans.sort((a, b) => a.start - b.start)
 }

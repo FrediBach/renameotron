@@ -1,5 +1,6 @@
 import type { HighlightSpan } from './highlight-types'
 import { expandReplacementMetadata, getReplacementOutputHighlights } from './replacement-output'
+import { applyMetadataModifiers, formatReadableBytes, formatUtcDate, MetadataUnavailableError, validateDateFormat, type MetadataValue } from './metadata-modifiers'
 
 export interface FileEntry {
   id: string
@@ -48,6 +49,10 @@ export const TOKEN_DEFINITIONS: TokenDefinition[] = [
   { key: 'camera', label: 'Camera', description: 'Camera model from embedded photo metadata.', example: '{camera}' },
   { key: 'width', label: 'Width', description: 'Image width in pixels; requires image metadata.', example: '{width}' },
   { key: 'height', label: 'Height', description: 'Image height in pixels; requires image metadata.', example: '{height}' },
+  { key: 'dimensions', label: 'Dimensions', description: 'Image width and height, for example 6240x4160.', example: '{dimensions}' },
+  { key: 'aspect', label: 'Aspect ratio', description: 'Reduced image aspect ratio, for example 3x2. Uses x for portable file names.', example: '{aspect}' },
+  { key: 'megapixels', label: 'Megapixels', description: 'Image pixel count in millions, rounded to two decimal places.', example: '{megapixels}' },
+  { key: 'orientation', label: 'Orientation', description: 'Image orientation: landscape, portrait, or square.', example: '{orientation}' },
   { key: 'size', label: 'Size', description: 'File size in bytes.', example: '{size}' },
   { key: 'type', label: 'MIME type', description: 'Browser-reported MIME type, e.g. image/jpeg. Slashes create folders.', example: '{type}' },
 ]
@@ -73,50 +78,87 @@ function splitName(name: string): { stem: string; extension: string } {
     : { stem: name, extension: '' }
 }
 
-function dateToken(value: string | number | undefined, format: string | undefined, label: string): string {
-  if (value === undefined || value === '') throw new Error(`Missing ${label.toLowerCase()} metadata.`)
+function dateToken(value: string | number | undefined, format: string | undefined, label: string): string | Date {
+  if (value === undefined || value === '') throw new MetadataUnavailableError(`Missing ${label.toLowerCase()} metadata.`)
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) throw new Error(`Invalid ${label.toLowerCase()} metadata.`)
-  const pattern = format ?? 'YYYY-MM-DD'
-  if (!pattern || /[a-zA-Z]/.test(pattern.replace(/YYYY|MM|DD|HH|mm|ss/g, ''))) {
-    throw new Error(`Use YYYY, MM, DD, HH, mm, or ss in ${label.toLowerCase()} formats.`)
-  }
-  const parts: Record<string, string> = {
-    YYYY: date.getUTCFullYear().toString().padStart(4, '0'),
-    MM: (date.getUTCMonth() + 1).toString().padStart(2, '0'),
-    DD: date.getUTCDate().toString().padStart(2, '0'),
-    HH: date.getUTCHours().toString().padStart(2, '0'),
-    mm: date.getUTCMinutes().toString().padStart(2, '0'),
-    ss: date.getUTCSeconds().toString().padStart(2, '0'),
-  }
-  return pattern.replace(/YYYY|MM|DD|HH|mm|ss/g, (part) => parts[part])
+  if (Number.isNaN(date.getTime())) throw new MetadataUnavailableError(`Invalid ${label.toLowerCase()} metadata.`)
+  return format === undefined ? date : formatUtcDate(date, format)
 }
 
-function resolveToken(file: FileEntry, key: string, format: string | undefined, index: number): string {
-  const { stem, extension } = splitName(file.name)
-  if (key === 'modified') return dateToken(file.lastModified, format, 'Modified date')
-  if (key === 'taken') return dateToken(file.metadata.taken, format, 'Capture date')
+/** Validate token names and legacy formats before a file is available. */
+export function validateTokenFormat(key: string, format: string | undefined): void {
+  if (!TOKEN_DEFINITIONS.some(token => token.key === key)) {
+    throw new Error(`Unknown token {${key}}. Choose a token from the metadata menu.`)
+  }
+  if (key === 'modified' || key === 'taken') {
+    if (format !== undefined) validateDateFormat(format, key === 'modified' ? 'Modified date' : 'Capture date')
+    return
+  }
   if (key === 'index') {
     if (format !== undefined && (!/^\d+$/.test(format) || Number(format) < 1 || Number(format) > 12)) {
       throw new Error('Index padding must be a number from 1 to 12, e.g. {index:3}.')
     }
-    return index.toString().padStart(Number(format ?? 1), '0')
+    return
   }
   if (format !== undefined) throw new Error(`The {${key}} token does not accept a format.`)
+}
+
+function imageDimensions(file: FileEntry): { width: number; height: number } {
+  const values = ['width', 'height'].map(key => {
+    const raw = file.metadata[key]
+    if (raw === undefined || raw === '') throw new MetadataUnavailableError(`Missing ${key} metadata.`)
+    const value = Number(raw)
+    if (!Number.isSafeInteger(value) || value <= 0) throw new MetadataUnavailableError(`Invalid ${key} metadata. Image dimensions must be positive whole numbers.`)
+    return value
+  })
+  return { width: values[0], height: values[1] }
+}
+
+function resolveTokenValue(file: FileEntry, key: string, format: string | undefined, index: number): MetadataValue {
+  validateTokenFormat(key, format)
+  const { stem, extension } = splitName(file.name)
+  if (key === 'modified') return dateToken(file.lastModified, format, 'Modified date')
+  if (key === 'taken') return dateToken(file.metadata.taken, format, 'Capture date')
+  if (key === 'index') {
+    return index.toString().padStart(Number(format ?? 1), '0')
+  }
   if (key === 'name') return stem
   if (key === 'ext') return extension
   if (key === 'uuid') return fileUuid(file)
   if (key === 'size') return String(file.size)
   if (key === 'type') {
-    if (!file.type) throw new Error('Missing MIME type metadata.')
+    if (!file.type) throw new MetadataUnavailableError('Missing MIME type metadata.')
     return file.type
   }
   if (['camera', 'width', 'height'].includes(key)) {
     const value = file.metadata[key]
-    if (value === undefined || value === '') throw new Error(`Missing ${key} metadata.`)
+    if (value === undefined || value === '') throw new MetadataUnavailableError(`Missing ${key} metadata.`)
     return String(value)
   }
+  if (['dimensions', 'aspect', 'megapixels', 'orientation'].includes(key)) {
+    const { width, height } = imageDimensions(file)
+    if (key === 'dimensions') return `${width}x${height}`
+    if (key === 'megapixels') return String(Number((width * height / 1_000_000).toFixed(2)))
+    if (key === 'orientation') return width === height ? 'square' : width > height ? 'landscape' : 'portrait'
+    let divisor = width
+    let remainder = height
+    while (remainder !== 0) [divisor, remainder] = [remainder, divisor % remainder]
+    return `${width / divisor}x${height / divisor}`
+  }
   throw new Error(`Unknown token {${key}}. Choose a token from the metadata menu.`)
+}
+
+/** Shared resolver for previews and the metadata editor. Modifiers run left to right. */
+export function resolveFileToken(file: FileEntry, key: string, format: string | undefined, index: number, modifiers: string[] = []): string {
+  let value: MetadataValue
+  let unavailableError: MetadataUnavailableError | undefined
+  try {
+    value = resolveTokenValue(file, key, format, index)
+  } catch (error) {
+    if (!(error instanceof MetadataUnavailableError)) throw error
+    unavailableError = error
+  }
+  return applyMetadataModifiers(value, modifiers, unavailableError)
 }
 
 export interface FileTokenDetail extends TokenDefinition {
@@ -135,9 +177,9 @@ export function getFileTokenDetails(file: FileEntry, index?: number): FileTokenD
         return { ...token, error: 'Select this file and match its name to assign a sequence number.' }
       }
       const format = token.example.slice(1, -1).split(':')[1]
-      const value = resolveToken(file, token.key, format, index ?? 1)
+      const value = resolveFileToken(file, token.key, format, index ?? 1)
       const displayValue = token.key === 'modified' || token.key === 'taken'
-        ? `${resolveToken(file, token.key, 'YYYY-MM-DD HH:mm:ss', index ?? 1)} UTC`
+        ? `${resolveFileToken(file, token.key, 'YYYY-MM-DD HH:mm:ss', index ?? 1)} UTC`
         : value
       return { ...token, value, displayValue }
     } catch (error) {
@@ -207,7 +249,7 @@ export function buildRenamePlan(
     try {
       // Resolve tokens before captures so braces in source names stay literal.
       // Escape $ inside metadata to keep it out of the replacement grammar.
-      const expanded = expandReplacementMetadata(replacement, (key, format) => resolveToken(file, key, format, matchedCount))
+      const expanded = expandReplacementMetadata(replacement, (key, format, modifiers) => resolveFileToken(file, key, format, matchedCount, modifiers))
       regex.lastIndex = 0
       const targetName = file.name.replace(regex, expanded.text)
       if (!targetName) throw new Error('The new file name is empty.')
@@ -295,9 +337,5 @@ export function buildRenamePlan(
 
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return '—'
-  if (bytes === 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1000)), units.length - 1)
-  const value = bytes / 1000 ** exponent
-  return `${value.toLocaleString('en-US', { maximumFractionDigits: exponent === 0 ? 0 : 1 })} ${units[exponent]}`
+  return formatReadableBytes(bytes)
 }

@@ -75,4 +75,32 @@ describe('replacement syntax highlighting', () => {
     const replacement = 'photo-{mod'
     expect(tokenizeReplacement(replacement, groups)).toEqual([{ start: 6, end: 10, kind: 'metadata', token: 'mod', label: 'Metadata: mod' }])
   })
+
+  it('highlights an entire modifier chain as its metadata key and ignores captures inside arguments', () => {
+    const expression = '{name|trim|replace("{ext}|$1", "$&,$<number>:")|lower}'
+    const replacement = `$2-${expression}-$1`
+    expect(tokenizeReplacement(replacement, groups).map(span => [replacement.slice(span.start, span.end), span.kind, span.token, span.group])).toEqual([
+      ['$2', 'group', undefined, 2],
+      [expression, 'metadata', 'name', undefined],
+      ['$1', 'group', undefined, 1],
+    ])
+    expect(tokenizeReplacement(expression, groups)[0].label).toBe(`Metadata: ${expression.slice(1, -1)}`)
+  })
+
+  it('keeps quoted delimiters and captures in unfinished modifier arguments within the metadata highlight', () => {
+    for (const expression of ['{name|replace("{ext}|$1', String.raw`{name|suffix("a\"$1|{ext}")|lower`, '{name|replace({ext},"$1")}']) {
+      expect(tokenizeReplacement(expression, groups)).toEqual([{
+        start: 0, end: expression.length, kind: 'metadata', token: 'name',
+        label: `Metadata: ${expression.slice(1, expression.endsWith('}') ? -1 : undefined)}`,
+      }])
+    }
+  })
+
+  it('does not let a partial capture literal inside a modifier swallow later capture references', () => {
+    const expression = '{name|suffix("$<")}'
+    const replacement = `${expression}-$1-$<number>`
+    expect(tokenizeReplacement(replacement, groups).map(span => [replacement.slice(span.start, span.end), span.kind])).toEqual([
+      [expression, 'metadata'], ['$1', 'group'], ['$<number>', 'group'],
+    ])
+  })
 })

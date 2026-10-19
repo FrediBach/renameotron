@@ -29,6 +29,7 @@ This repository is a local POC. It has not been deployed or connected to the ren
 - 22 built-in templates, searchable by category, plus custom templates saved in this browser.
 - Optional recursive scanning, destination subfolder creation, sequences, and stable UUIDs.
 - Basic file metadata and embedded photo EXIF, processed in the browser with `exifr`.
+- Chain metadata modifiers for text cleanup, number and date formatting, MIME subtypes, and missing-value fallbacks; calculated image metadata includes aspect ratios, dimensions, megapixels, and orientation.
 - Click a file row (or focus its filename and press Enter) to inspect every supported metadata field, its value, and the corresponding naming token. Click an available token to append it to the name pattern. Missing fields are marked; sequence values follow the current selected matches.
 - Explicit review before applying native rename or copy-and-delete, with partial-result reporting and downloadable session receipts.
 - Responsive layout, keyboard navigation, reduced-motion support, accessible Radix dialogs, checkboxes, and switches.
@@ -49,12 +50,53 @@ Regexes match the **filename including its extension**, not the full path. A pla
 | `{taken:YYYY-MM-DD}` | Photo capture date from embedded EXIF |
 | `{camera}` | EXIF camera model |
 | `{width}` / `{height}` | Image dimensions when embedded metadata exposes them |
+| `{dimensions}` | Width and height together, for example `6240x4160` |
+| `{aspect}` | Reduced width-to-height ratio using a filename-safe separator, for example `3x2` |
+| `{megapixels}` | Width × height divided by 1,000,000, rounded to two decimal places |
+| `{orientation}` | `landscape`, `portrait`, or `square`, based on width and height |
 | `{size}` | File size in bytes |
 | `{type}` | Browser-reported MIME type; `/` becomes a folder separator |
 
-Dates use UTC and support `YYYY`, `MM`, `DD`, `HH`, `mm`, and `ss`. EXIF timestamps often lack timezone information; the parser's interpretation is used. Missing metadata is flagged instead of silently producing an incomplete name. Unsupported or damaged image formats may not expose dimensions. Audio tags, PDF document properties, OS creation times, Finder tags, and extended attributes are outside this POC's scope.
+Dates use UTC and support `YYYY`, `MM`, `DD`, `HH`, `mm`, and `ss`. EXIF timestamps often lack timezone information; the parser's interpretation is used. Missing metadata is flagged unless you supply a `default(...)` modifier. Unsupported or damaged image formats may not expose dimensions. Audio tags, PDF document properties, OS creation times, Finder tags, and extended attributes are outside this POC's scope.
 
 For example, match `^IMG_(\d+)\.(jpg|png)$` and replace with `studio-{index:3}.{ext}`. To organize by date, use `{modified:YYYY}/{modified:MM}/{name}.{ext}`.
+
+### Metadata modifiers
+
+Append modifiers inside a token with `|`. They run from left to right, so their order matters. The existing date and index formats still work, including when followed by modifiers:
+
+```text
+{name|trim|lower|replace(" ","-")}.{ext|lower}
+{modified:YYYY-MM-DD|prefix("shoot-")}-{index:3}.{ext}
+{name|slug}-{size|bytes|whitespace("-")}.{ext|lower}
+{camera|default("unknown-camera")|slug}-{aspect}-{megapixels|round(1)}MP.{ext}
+```
+
+| Modifier | Use |
+| --- | --- |
+| `lower` / `upper` / `title` | Change text casing |
+| `trim` | Remove leading and trailing whitespace |
+| `replace("old","new")` | Replace every occurrence of a literal string |
+| `whitespace("-")` | Replace each run of whitespace with the supplied separator |
+| `slug` | Remove accents and make a lowercase, dash-separated name; preserve non-Latin letters |
+| `ascii` | Fold common accented Latin characters into ASCII and remove remaining non-ASCII characters |
+| `prefix("photo-")` / `suffix("-edited")` | Add text before or after the value |
+| `truncate(40)` | Keep the first 40 Unicode code points; accepts 0–4096 |
+| `pad(3)` | Pad a value with leading zeros to at least three characters; accepts 1–128 |
+| `bytes` | Format a byte count in decimal units, for example `2400000` → `2.4 MB` |
+| `compact` | Abbreviate large numbers, for example `68000` → `68k` |
+| `round(2)` | Round a number to at most two decimal places; accepts 0–12 |
+| `mime` | Keep the MIME subtype, removing `x-` and `+` suffixes: `image/jpeg` → `jpeg`, `image/svg+xml` → `svg` |
+| `default("unknown")` | Provide a fallback for unavailable or empty metadata |
+| `date("YYYY-MM-DD")` | Format a date in UTC with the same fields as the existing colon syntax |
+
+Use single or double quotes for text arguments. Quoted text can contain commas, pipes, and braces; escape quotes or backslashes with `\`, and use `\t`, `\n`, or `\uXXXX` for escaped characters. `replace(" ","-")` replaces ordinary spaces; `whitespace("-")` also handles tabs and other whitespace and collapses consecutive whitespace into one separator. Replacement text is literal: regex patterns, metadata tokens, and capture references such as `$1` are not expanded inside modifier arguments.
+
+Put `default(...)` before the transformations you want applied to the fallback, for example `{camera|default("Unknown Camera")|slug}`. It handles unavailable source metadata (including invalid dates or calculated dimensions) and empty values, but does not hide invalid tokens, malformed arguments, or failed transformations. Zero remains a valid value.
+
+Use `date(...)` before text modifiers to preserve the original timestamp, for example `{taken|date("YYYY-MM-DD_HH-mm-ss")|prefix("photo-")}`. A preceding text modifier or colon format has already converted the date to text. Chains support up to 32 modifiers.
+
+Calculated image tokens require both width and height. Modifiers do not bypass destination validation: a `/` in their output creates folders, and invalid paths, reserved names, and duplicate destinations are still rejected.
 
 ## Filesystem behavior and limits
 
@@ -76,6 +118,8 @@ API references: [Chrome File System Access guide](https://developer.chrome.com/d
 - `src/components/PatternInput.tsx` — highlighted inputs and autocomplete
 - `src/components/ui/` — shadcn conventions with accessible Radix primitives
 - `src/lib/rename.ts` — pure rename planning and validation
+- `src/lib/metadata-modifiers.ts` — modifier catalog, argument parsing, and transformations
+- `src/lib/metadata-pattern.ts` — shared token scanner for modifiers and quoted arguments
 - `src/lib/filesystem.ts` — directory scanning and checked execution
 - `src/lib/templates.ts` — curated template library
 

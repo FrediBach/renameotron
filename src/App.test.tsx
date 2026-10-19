@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
+import { MetadataPatternBuilder } from './components/MetadataPatternBuilder'
 import { createDemoFiles } from './lib/demo'
 import * as filesystem from './lib/filesystem'
 
@@ -72,7 +73,8 @@ describe('renameotron workspace', () => {
     expect(within(dialog).getByText('image/jpeg')).toBeTruthy()
     expect(within(dialog).getByText('001')).toBeTruthy()
     expect(within(dialog).getByRole('button', { name: 'Insert {taken:YYYY-MM-DD}' })).toHaveProperty('disabled', false)
-    expect(within(dialog).getAllByRole('button', { name: /^Insert / })).toHaveLength(11)
+    expect(within(dialog).getAllByRole('button', { name: /^Insert / })).toHaveLength(15)
+    for (const value of ['6240x4160', '3x2', '25.96', 'landscape']) expect(within(dialog).getByText(value)).toBeTruthy()
 
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -117,8 +119,8 @@ describe('renameotron workspace', () => {
     const dialog = within(screen.getByRole('dialog', { name: 'File metadata' }))
     expect(dialog.getByText('shoot-notes')).toBeTruthy()
     expect(dialog.getByText('text/markdown')).toBeTruthy()
-    expect(dialog.getAllByText('Not available')).toHaveLength(5)
-    for (const token of ['{taken:YYYY-MM-DD}', '{camera}', '{width}', '{height}', '{index:3}']) {
+    expect(dialog.getAllByText('Not available')).toHaveLength(9)
+    for (const token of ['{taken:YYYY-MM-DD}', '{camera}', '{width}', '{height}', '{index:3}', '{dimensions}', '{aspect}', '{megapixels}', '{orientation}']) {
       expect(dialog.getByRole('button', { name: `Insert ${token}` })).toHaveProperty('disabled', true)
     }
     expect(dialog.getByRole('button', { name: 'Insert {modified:YYYY-MM-DD}' })).toHaveProperty('disabled', false)
@@ -470,5 +472,92 @@ describe('renameotron workspace', () => {
     expect((await screen.findByRole('alert')).textContent).toMatch(/supported desktop Chromium browser/)
     expect(screen.getByRole('heading', { name: 'Studio selects' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Rename 8 files' })).toHaveProperty('disabled', false)
+  })
+
+  it('builds a chain from file metadata and inserts the previewed result', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await replaceInput(user, replacementInput(), '{name}-')
+    await user.click(screen.getByRole('button', { name: 'View metadata for IMG_1042.jpg' }))
+    let dialog = within(screen.getByRole('dialog', { name: 'File metadata' }))
+    await user.click(dialog.getByRole('button', { name: 'Customize Camera' }))
+    dialog = within(screen.getByRole('dialog', { name: 'File metadata' }))
+    for (const modifier of ['trim', 'lower', 'whitespace']) {
+      await user.selectOptions(dialog.getByRole('combobox', { name: 'Add a modifier' }), modifier)
+      await user.click(dialog.getByRole('button', { name: 'Add' }))
+    }
+    expect(document.activeElement).toBe(dialog.getByRole('textbox', { name: 'Modifier 3' }))
+    expect(dialog.getByRole('status').textContent).toBe('fujifilm-x100vi')
+    await user.click(dialog.getByRole('button', { name: 'Insert pattern' }))
+    expect(replacementInput().value).toBe('{name}-{camera|trim|lower|whitespace("-")}')
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('IMG_1042-fujifilm-x100vi')
+    expect(targetFilename('IMG_1042.jpg').querySelector('[data-metadata-token="camera"]')?.textContent).toBe('fujifilm-x100vi')
+    await waitFor(() => expect(document.activeElement).toBe(replacementInput()))
+  })
+
+  it('previews reordered and edited modifiers and prevents inserting invalid expressions', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: 'Modifiers' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'Metadata & modifiers' }))
+    await user.selectOptions(dialog.getByRole('combobox', { name: 'Metadata' }), 'camera')
+    for (const modifier of ['prefix', 'upper']) {
+      await user.selectOptions(dialog.getByRole('combobox', { name: 'Add a modifier' }), modifier)
+      await user.click(dialog.getByRole('button', { name: 'Add' }))
+    }
+    expect(dialog.getByRole('status').textContent).toBe('PHOTO-FUJIFILM X100VI')
+    await user.click(dialog.getByRole('button', { name: 'Move modifier 2 up' }))
+    expect(dialog.getByRole('status').textContent).toBe('photo-FUJIFILM X100VI')
+    await user.click(dialog.getByRole('button', { name: 'Remove modifier 1' }))
+    expect(dialog.getByRole('status').textContent).toBe('photo-Fujifilm X100VI')
+    await replaceInput(user, dialog.getByRole('textbox', { name: 'Modifier 1' }), 'prefix("camera-")')
+    expect(dialog.getByRole('status').textContent).toBe('camera-Fujifilm X100VI')
+    await replaceInput(user, dialog.getByRole('textbox', { name: 'Modifier 1' }), 'prefix(')
+    expect(dialog.getByRole('button', { name: 'Insert pattern' })).toHaveProperty('disabled', true)
+    expect(dialog.getByText(/Close the parentheses/)).toBeTruthy()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Modifiers' })))
+  })
+
+  it('formats bytes through the builder and allows a fallback for unavailable metadata', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: 'Modifiers' }))
+    let dialog = within(screen.getByRole('dialog', { name: 'Metadata & modifiers' }))
+    await user.selectOptions(dialog.getByRole('combobox', { name: 'Metadata' }), 'size')
+    for (const modifier of ['bytes', 'whitespace']) {
+      await user.selectOptions(dialog.getByRole('combobox', { name: 'Add a modifier' }), modifier)
+      await user.click(dialog.getByRole('button', { name: 'Add' }))
+    }
+    expect(dialog.getByRole('status').textContent).toBe('2.4-MB')
+    await user.keyboard('{Escape}')
+    await user.click(screen.getByRole('button', { name: 'View metadata for shoot-notes.md' }))
+    dialog = within(screen.getByRole('dialog', { name: 'File metadata' }))
+    await user.click(dialog.getByRole('button', { name: 'Customize Camera' }))
+    expect(document.activeElement).toBe(dialog.getByRole('combobox', { name: 'Metadata' }))
+    expect(dialog.getByRole('button', { name: 'Insert pattern' })).toHaveProperty('disabled', true)
+    await user.selectOptions(dialog.getByRole('combobox', { name: 'Add a modifier' }), 'default')
+    await user.click(dialog.getByRole('button', { name: 'Add' }))
+    expect(dialog.getByRole('status').textContent).toBe('unknown')
+    expect(dialog.getByRole('button', { name: 'Insert pattern' })).toHaveProperty('disabled', false)
+    await user.click(dialog.getByRole('button', { name: 'All metadata' }))
+    expect(document.activeElement).toBe(dialog.getByRole('button', { name: 'Customize Camera' }))
+  })
+
+  it('validates modifier arguments and date formats without a sample file', async () => {
+    const user = userEvent.setup()
+    const insert = vi.fn()
+    render(<MetadataPatternBuilder onInsert={insert} />)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Add a modifier' }), 'round')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
+    await replaceInput(user, screen.getByRole('textbox', { name: 'Modifier 1' }), 'round(99)')
+    expect(screen.getByText(/whole number from 0 to 12/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Insert pattern' })).toHaveProperty('disabled', true)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Metadata' }), 'modified')
+    await user.type(screen.getByRole('textbox', { name: 'Date format (UTC)' }), 'invalid')
+    expect(screen.getByRole('button', { name: 'Insert pattern' })).toHaveProperty('disabled', true)
+    await replaceInput(user, screen.getByRole('textbox', { name: 'Date format (UTC)' }), 'YYYY-MM')
+    await user.click(screen.getByRole('button', { name: 'Insert pattern' }))
+    expect(insert).toHaveBeenCalledWith('{modified:YYYY-MM}')
   })
 })

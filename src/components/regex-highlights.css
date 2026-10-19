@@ -40,7 +40,7 @@
 .hl-token-uuid, .hl-token-type { --token-background: var(--regex-group-4); }
 .hl-token-modified, .hl-token-taken { --token-background: var(--regex-group-3); }
 .hl-token-camera, .hl-token-size { --token-background: var(--regex-group-5); }
-.hl-token-width, .hl-token-height { --token-background: var(--regex-group-6); }
+.hl-token-width, .hl-token-height, .hl-token-dimensions, .hl-token-aspect, .hl-token-megapixels, .hl-token-orientation { --token-background: var(--regex-group-6); }
 
 .token-chips button.metadata-token-chip {
   color: #293329;

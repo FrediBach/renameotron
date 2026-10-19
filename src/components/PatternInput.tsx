@@ -1,5 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { TOKEN_DEFINITIONS } from '../lib/rename'
+import { MODIFIER_DEFINITIONS } from '@/lib/metadata-modifiers'
+import { scanMetadataTokens } from '@/lib/metadata-pattern'
 import type { CaptureGroup } from '@/lib/highlight-types'
 import { tokenizeRegex, tokenizeReplacement } from '@/lib/pattern-highlights'
 import { HighlightedText } from './HighlightedText'
@@ -30,13 +32,19 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
   const [cursor, setCursor] = useState(value.length)
   const [activeIndex, setActiveIndex] = useState(0)
   const [dismissed, setDismissed] = useState(false)
-  const match = kind === 'replacement' ? value.slice(0, cursor).match(/\{([^{}]*)$/) : null
-  const query = match?.[1].toLowerCase()
-  const suggestions = query === undefined ? [] : TOKEN_DEFINITIONS.filter((token) => (
+  const precedingToken = kind === 'replacement' ? scanMetadataTokens(value.slice(0, cursor), true).at(-1) : undefined
+  const activeToken = precedingToken && !precedingToken.complete && precedingToken.end === cursor ? precedingToken : undefined
+  const completingModifier = !!activeToken?.modifiers.length
+  const partialModifier = activeToken?.modifiers.at(-1)
+  const query = completingModifier
+    ? (partialModifier && !/^\s*[a-z]*$/i.test(partialModifier) ? undefined : partialModifier?.trim().toLowerCase())
+    : activeToken ? value.slice(activeToken.start + 1, cursor).toLowerCase() : undefined
+  const definitions = completingModifier ? MODIFIER_DEFINITIONS : TOKEN_DEFINITIONS
+  const suggestions = query === undefined ? [] : definitions.filter((token) => (
     tokenKey(token.key).toLowerCase().includes(query)
     || tokenKey(token.example).toLowerCase().includes(query)
     || token.label.toLowerCase().includes(query)
-  )).slice(0, 8)
+  ))
   const isOpen = focused && !dismissed && suggestions.length > 0
   const selectedIndex = Math.min(activeIndex, Math.max(0, suggestions.length - 1))
   const menuId = `${id}-suggestions`
@@ -63,13 +71,29 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
   }, [isOpen, selectedIndex])
 
   const insertToken = (key: string) => {
-    if (!match) return
-    const start = cursor - match[0].length
-    const token = `{${tokenKey(key)}}`
-    const closingToken = value.slice(cursor).match(/^[^{}]*\}/)
-    const end = cursor + (closingToken?.[0].length ?? 0)
-    const nextCursor = start + token.length
-    onChange(value.slice(0, start) + token + value.slice(end))
+    if (!activeToken) return
+    const wholeToken = scanMetadataTokens(value, true).find(token => token.start === activeToken.start) ?? activeToken
+    let next: string
+    let nextCursor: number
+    if (completingModifier) {
+      const start = cursor - (partialModifier?.length ?? 0)
+      const segmentLength = wholeToken.modifiers[activeToken.modifiers.length - 1]?.length ?? partialModifier?.length ?? 0
+      const end = start + segmentLength
+      const closing = wholeToken.complete ? '' : '}'
+      next = value.slice(0, start) + key + value.slice(end, wholeToken.end) + closing + value.slice(wholeToken.end)
+      nextCursor = start + key.length
+      if (next[nextCursor] === '}') nextCursor++
+    } else {
+      const token = tokenKey(key)
+      const chain = wholeToken.modifiers.length ? `|${wholeToken.modifiers.join('|')}` : ''
+      const expression = `{${token}${chain}}`
+      // Empty braces are literal to the scanner, but their closing brace can
+      // still be reused when the user completes a metadata key between them.
+      const end = !wholeToken.complete && value[wholeToken.end] === '}' ? wholeToken.end + 1 : wholeToken.end
+      next = value.slice(0, activeToken.start) + expression + value.slice(end)
+      nextCursor = activeToken.start + expression.length
+    }
+    onChange(next)
     setCursor(nextCursor)
     setDismissed(true)
     requestAnimationFrame(() => {
@@ -134,7 +158,7 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
         onKeyDown={handleKeyDown}
       />
       {isOpen && (
-        <div ref={menuRef} className="autocomplete-menu" id={menuId} role="listbox" aria-label="File metadata">
+        <div ref={menuRef} className="autocomplete-menu" id={menuId} role="listbox" aria-label={completingModifier ? 'Metadata modifiers' : 'File metadata'}>
           {suggestions.map((token, index) => (
             <button
               key={token.key}
