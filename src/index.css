@@ -74,7 +74,7 @@ main { padding: 24px 55px 0; }
 .button-secondary { background: #e9ece2; color: #58644a; }
 .button-sm { padding: 8px 12px; font-size: var(--text-body); }
 .button-icon { padding: 9px; width: 34px; height: 34px; }
-.workspace { display: grid; grid-template-columns: 340px minmax(0, 1fr); align-items: stretch; gap: 22px; }
+.workspace { display: grid; grid-template-columns: 400px minmax(0, 1fr); align-items: stretch; gap: 22px; }
 .rule-panel, .preview-panel { background: var(--paper); border: 1px solid #dcded5; border-radius: 7px; overflow: hidden; box-shadow: 0 2px 4px #22290b02; }
 .panel-heading { height: 57px; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); }
 .panel-heading h2, .preview-heading h2 { margin: 0; font-size: var(--text-title); font-weight: 550; letter-spacing: -.1px; }
@@ -265,7 +265,7 @@ main { padding: 24px 55px 0; }
 @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 
 @media (min-width: 1440px) {
-  .workspace { grid-template-columns: 360px minmax(0, 1fr); gap: 26px; }
+  .workspace { grid-template-columns: 420px minmax(0, 1fr); gap: 26px; }
   .site-header { height: 94px; }
   .file-table td { height: 46px; }
   .file-table-scroll { max-height: 590px; }
@@ -278,7 +278,7 @@ main { padding: 24px 55px 0; }
   .brand-tagline { display: none; }
   main { padding: 24px 30px 0; }
   .site-footer { margin: 0 30px; }
-  .workspace { grid-template-columns: 300px minmax(0, 1fr); gap: 17px; }
+  .workspace { grid-template-columns: 340px minmax(0, 1fr); gap: 17px; }
   .file-table .size-cell { display: none; }
   .filename-cell, .target-name { font-size: var(--text-body); }
   .rename-action { padding: 18px 17px; }
