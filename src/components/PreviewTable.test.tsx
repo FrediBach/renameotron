@@ -114,6 +114,103 @@ describe('preview table controls', () => {
     expect(fileOrder()).toHaveLength(12)
   })
 
+  it('combines typed filters without changing rename targets or selecting hidden files', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const search = screen.getByRole('textbox', { name: 'Search files' })
+
+    fireEvent.change(search, { target: { value: 'type:image size<3MB aspect:landscape date:2026' } })
+    expect(fileOrder()).toEqual(['IMG_1042.jpg', 'IMG_1043.jpg', 'IMG_1044.jpg', 'IMG_1045.jpg'])
+    expect(targetFilename('IMG_1042.jpg')).toBe('studio-001.jpg')
+    expect(targetFilename('IMG_1045.jpg')).toBe('studio-004.jpg')
+    expect(screen.getByRole('button', { name: 'Rename 8 files' })).toHaveProperty('disabled', false)
+
+    await user.click(screen.getByRole('checkbox', { name: 'Select all visible files' }))
+    expect(screen.getByRole('button', { name: 'Rename 4 files' })).toHaveProperty('disabled', false)
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(fileOrder()).toHaveLength(12)
+    expect(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('checkbox', { name: 'Select IMG_1045.jpg' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('checkbox', { name: 'Select IMG_1046.jpg' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('checkbox', { name: 'Select contact-sheet.pdf' }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('supports grouped alternatives, exclusions, and exact filenames alongside contains searches', () => {
+    render(<App />)
+    const search = screen.getByRole('textbox', { name: 'Search files' })
+
+    fireEvent.change(search, { target: { value: '(name=IMG_1042.jpg OR name=IMG_1049.jpg) NOT name=IMG_1042.jpg' } })
+    expect(fileOrder()).toEqual(['IMG_1049.jpg'])
+    expect(targetFilename('IMG_1049.jpg')).toBe('studio-008.jpg')
+    expect(screen.getByRole('button', { name: 'Rename 8 files' })).toHaveProperty('disabled', false)
+
+    fireEvent.change(search, { target: { value: 'name:IMG_104' } })
+    expect(fileOrder()).toHaveLength(8)
+    fireEvent.change(search, { target: { value: 'name=IMG_104' } })
+    expect(fileOrder()).toEqual([])
+    fireEvent.change(search, { target: { value: 'name=img_1042.jpg' } })
+    expect(fileOrder()).toEqual(['IMG_1042.jpg'])
+  })
+
+  it('opens the search guide by keyboard and safely appends examples to grouped alternatives', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const search = screen.getByRole('textbox', { name: 'Search files' })
+    const syntaxButton = screen.getByRole('button', { name: 'Search syntax' })
+    expect(syntaxButton.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.change(search, { target: { value: 'name=contact-sheet.pdf OR name=IMG_1042.jpg' } })
+    expect(fileOrder()).toEqual(['IMG_1042.jpg', 'contact-sheet.pdf'])
+
+    syntaxButton.focus()
+    await user.keyboard('{Enter}')
+    expect(syntaxButton.getAttribute('aria-expanded')).toBe('true')
+    const guide = within(screen.getByRole('region', { name: 'Search syntax guide' }))
+    expect(guide.getByRole('button', { name: 'Add filter size<24MB' })).toBeTruthy()
+    expect(guide.getByRole('button', { name: 'Add filter aspect:landscape' })).toBeTruthy()
+    expect(guide.getByRole('button', { name: 'Add filter date>2024 date<2026' })).toBeTruthy()
+    await user.click(guide.getByRole('button', { name: 'Add filter type:image' }))
+    expect(search).toHaveProperty('value', expect.stringMatching(/^\(name=contact-sheet\.pdf OR name=IMG_1042\.jpg\)\s+(?:AND\s+)?type:image$/))
+    expect(fileOrder()).toEqual(['IMG_1042.jpg'])
+    expect(document.activeElement).toBe(search)
+
+    syntaxButton.focus()
+    await user.keyboard(' ')
+    expect(syntaxButton.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('region', { name: 'Search syntax guide' })).toBeNull()
+
+    await user.keyboard('{Enter}')
+    within(screen.getByRole('region', { name: 'Search syntax guide' })).getByRole('button', { name: 'Add filter size<24MB' }).focus()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('region', { name: 'Search syntax guide' })).toBeNull()
+    expect(document.activeElement).toBe(syntaxButton)
+  })
+
+  it('announces invalid search syntax and recovers when the search is corrected or cleared', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const search = screen.getByRole('textbox', { name: 'Search files' })
+    fireEvent.change(search, { target: { value: 'size<oops' } })
+    expect(search.getAttribute('aria-invalid')).toBe('true')
+    const descriptionIds = search.getAttribute('aria-describedby')?.split(/\s+/) ?? []
+    const error = descriptionIds.map(id => document.getElementById(id)).find(element => element?.getAttribute('role') === 'status')
+    expect(error).toBeTruthy()
+    expect(error?.textContent).toMatch(/size|number|unit/i)
+    expect(error?.textContent).toMatch(/At character \d+/)
+    expect(fileOrder()).toEqual([])
+    expect(screen.getByRole('checkbox', { name: 'Select all visible files' })).toHaveProperty('disabled', true)
+    expect(screen.getByRole('button', { name: 'Rename 8 files' })).toHaveProperty('disabled', false)
+
+    fireEvent.change(search, { target: { value: 'size<3MB' } })
+    expect(search.getAttribute('aria-invalid')).not.toBe('true')
+    expect(fileOrder()).toHaveLength(8)
+    fireEvent.change(search, { target: { value: 'size<' } })
+    expect(search.getAttribute('aria-invalid')).toBe('true')
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+    expect(search).toHaveProperty('value', '')
+    expect(search.getAttribute('aria-invalid')).not.toBe('true')
+    expect(fileOrder()).toHaveLength(12)
+  })
+
   it('keeps collapsed column filters active and clears a filter when its column is removed', async () => {
     const user = userEvent.setup()
     render(<App />)

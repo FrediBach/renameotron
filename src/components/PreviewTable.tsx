@@ -5,6 +5,8 @@ import { Checkbox } from './ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog'
 import { MatchedFilename } from './MatchedFilename'
 import { HighlightedText } from './HighlightedText'
+import { FileSearch } from './FileSearch'
+import { compileFileSearch } from '@/lib/file-search'
 import { buildPreviewRecords, DEFAULT_COLUMN_IDS, getPreviewColumns, selectPreviewRecords, type PreviewRecord, type PreviewColumn, type PreviewSort } from '@/lib/preview-table'
 import type { FileEntry, RenamePlan } from '@/lib/rename'
 import './preview-table.css'
@@ -67,7 +69,8 @@ export function PreviewTable({ files, plan, selectedIds, onToggleFile, onSelectF
   const records = useMemo(() => buildPreviewRecords(plan.rows, selectedIds), [plan.rows, selectedIds])
   const activeFilters = useMemo(() => Object.fromEntries(columns.flatMap(column => filters[column.id]?.trim() ? [[column.id, filters[column.id]]] : [])), [columns, filters])
   const sort = columns.some(column => column.id === settings.sort?.columnId) ? settings.sort : null
-  const visible = useMemo(() => selectPreviewRecords(records, { search, filters: activeFilters, sort, matchedOnly: filter === 'matched' }), [records, search, activeFilters, sort, filter])
+  const searchQuery = useMemo(() => compileFileSearch(search), [search])
+  const visible = useMemo(() => selectPreviewRecords(records, { search, filters: activeFilters, sort, matchedOnly: filter === 'matched' }, searchQuery), [records, search, searchQuery, activeFilters, sort, filter])
   const selectedVisible = visible.filter(record => selectedIds.has(record.row.file.id)).length
   const filterCount = Object.keys(activeFilters).length
   const hasSearch = !!search.trim() || filterCount > 0
@@ -115,7 +118,7 @@ export function PreviewTable({ files, plan, selectedIds, onToggleFile, onSelectF
 
   return <>
     <PreviewToolbar filter={filter} onFilterChange={onFilterChange} fileCount={files.length} matchedCount={plan.matchedCount}
-      search={search} onSearchChange={onSearchChange} hasSearch={hasSearch} visibleCount={visible.length}
+      search={search} onSearchChange={onSearchChange} searchError={searchQuery.error} hasSearch={hasSearch} visibleCount={visible.length}
       showFilters={showFilters} setShowFilters={setShowFilters} filterCount={filterCount} columnsButton={columnsButton}
       openColumns={openColumns} columns={columns} activeFilters={activeFilters} setFilters={setFilters} clearFilters={clearFilters} />
     <div className="file-table-scroll" role="region" aria-label="File rename preview" tabIndex={0}>
@@ -144,7 +147,7 @@ export function PreviewTable({ files, plan, selectedIds, onToggleFile, onSelectF
         <tbody>{visible.map(record => <PreviewRow key={record.row.file.id} record={record} columns={columns}
           selected={selectedIds.has(record.row.file.id)} onToggleFile={onToggleFile} onInspect={onInspect} highlightRegex={highlightRegex} />)}</tbody>
       </table>
-      {visible.length === 0 && <div className="empty-state"><Search size={25} /><h3>{files.length === 0 ? 'A clean slate.' : 'No files in this view.'}</h3><p>{files.length === 0 ? 'Open a folder with a few files to get started.' : 'Try different column filters or clear your search.'}</p>{(hasSearch || filter === 'matched') && <Button variant="outline" size="sm" onClick={clearFilters}>Show all files</Button>}</div>}
+      {visible.length === 0 && <PreviewEmptyState fileCount={files.length} searchError={!!searchQuery.error} hasFilters={hasSearch || filter === 'matched'} onClear={clearFilters} />}
     </div>
     <Dialog open={columnsOpen} onOpenChange={openColumns}>
       <DialogContent className="columns-dialog" onCloseAutoFocus={event => { event.preventDefault(); columnsButton.current?.focus() }}>
@@ -192,10 +195,17 @@ function PreviewRow({ record: { row, values }, columns, selected, onToggleFile, 
   </tr>
 }
 
+function PreviewEmptyState({ fileCount, searchError, hasFilters, onClear }: { fileCount: number; searchError: boolean; hasFilters: boolean; onClear: () => void }) {
+  const title = searchError ? 'Finish your search.' : fileCount === 0 ? 'A clean slate.' : 'No files in this view.'
+  const hint = searchError ? 'Check the search hint above to continue filtering.' : fileCount === 0 ? 'Open a folder with a few files to get started.' : 'Try different filters or clear your search.'
+  return <div className="empty-state"><Search size={25} /><h3>{title}</h3><p>{hint}</p>{hasFilters && <Button variant="outline" size="sm" onClick={onClear}>Show all files</Button>}</div>
+}
+
 interface PreviewToolbarProps extends Pick<PreviewTableProps, 'filter' | 'onFilterChange' | 'search' | 'onSearchChange' | 'setFilters'> {
   fileCount: number
   matchedCount: number
   visibleCount: number
+  searchError?: { message: string; position: number }
   hasSearch: boolean
   showFilters: boolean
   setShowFilters: Dispatch<SetStateAction<boolean>>
@@ -207,7 +217,7 @@ interface PreviewToolbarProps extends Pick<PreviewTableProps, 'filter' | 'onFilt
   clearFilters: () => void
 }
 
-function PreviewToolbar({ filter, onFilterChange, fileCount, matchedCount, search, onSearchChange, hasSearch, visibleCount,
+function PreviewToolbar({ filter, onFilterChange, fileCount, matchedCount, search, onSearchChange, searchError, hasSearch, visibleCount,
   showFilters, setShowFilters, filterCount, columnsButton, openColumns, columns, activeFilters, setFilters, clearFilters }: PreviewToolbarProps) {
   return <div className="preview-toolbar preview-table-toolbar">
       <div className="preview-controls">
@@ -215,10 +225,8 @@ function PreviewToolbar({ filter, onFilterChange, fileCount, matchedCount, searc
           <button className={filter === 'all' ? 'active' : ''} aria-pressed={filter === 'all'} onClick={() => onFilterChange('all')}>All files<span>{fileCount}</span></button>
           <button className={filter === 'matched' ? 'active' : ''} aria-pressed={filter === 'matched'} onClick={() => onFilterChange('matched')}>Matched<span>{matchedCount}</span></button>
         </div>
-        <div className="preview-search-row">
-          <div className="file-search"><Search size={14} /><input aria-label="Search files" placeholder="Search names & metadata…" value={search} onChange={event => onSearchChange(event.target.value)} />{search && <button onClick={() => onSearchChange('')} aria-label="Clear search" title="Clear search"><X size={13} /></button>}</div>
-          <span className="preview-result-count" aria-live="polite" aria-atomic="true">{hasSearch || filter === 'matched' ? `${visibleCount} of ${fileCount}` : `${fileCount} files`}</span>
-        </div>
+        <FileSearch value={search} onChange={onSearchChange} error={searchError}
+          resultCount={hasSearch || filter === 'matched' ? `${visibleCount} of ${fileCount}` : `${fileCount} files`} />
         <div className="preview-view-actions">
           <button className="preview-tool-button" aria-label="Column filters" aria-pressed={showFilters} title="Search within individual columns" onClick={() => setShowFilters(current => !current)}><ListFilter size={14} /><span>Filters</span>{filterCount > 0 && <b>{filterCount}</b>}</button>
           <button ref={columnsButton} className="preview-tool-button" aria-label="Columns" title="Manage columns" aria-haspopup="dialog" onClick={() => openColumns(true)}><Columns3 size={14} /><span>Columns</span></button>

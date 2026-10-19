@@ -74,6 +74,18 @@ describe('preview columns and values', () => {
 })
 
 describe('preview search and sorting', () => {
+  it('applies column and matched filters to the whole Boolean query before sorting', () => {
+    const records = preview([
+      file('one.jpg', { size: 2_000_000, metadata: { camera: 'Fujifilm' } }),
+      file('two.png', { size: 1_000_000, type: 'image/png', metadata: { camera: 'Fujifilm' } }),
+      file('three.jpg', { size: 3_000_000, metadata: { camera: 'Sony' } }),
+    ], '^.*\\.jpg$')
+    const options = { search: 'ext:jpg OR ext:png', filters: { camera: 'Fujifilm' }, sort: { columnId: 'size', direction: 'asc' as const } }
+    expect(select(records, options).map(record => record.row.file.name)).toEqual(['two.png', 'one.jpg'])
+    expect(select(records, { ...options, matchedOnly: true }).map(record => record.row.file.name)).toEqual(['one.jpg'])
+    expect(records[0].values.index.text).toBe('1')
+  })
+
   it('filters and sorts the To column by the displayed no-match and excluded labels', () => {
     const records = preview([file('z.jpg'), file('b.txt'), file('a.jpg')], '^.*\\.jpg$', new Set(['z.jpg', 'b.txt']))
     expect(records.map(record => record.values.to.text)).toEqual(['001-z.jpg', 'No match', 'Excluded'])

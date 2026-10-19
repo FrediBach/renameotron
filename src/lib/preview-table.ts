@@ -1,4 +1,5 @@
 import { formatBytes, getFileTokenDetails, TOKEN_DEFINITIONS, type FileEntry, type FileTokenDetail, type RenameRow } from './rename'
+import { compileFileSearch } from './file-search'
 
 export interface PreviewColumn {
   id: string
@@ -153,14 +154,13 @@ function includesQuery(value: PreviewValue | undefined, query: string): boolean 
 }
 
 /** Search all metadata, combine column filters with AND, and only reorder the view. */
-export function selectPreviewRecords(records: PreviewRecord[], options: PreviewSelectionOptions): PreviewRecord[] {
-  const query = normalized(options.search.trim())
+export function selectPreviewRecords(records: PreviewRecord[], options: PreviewSelectionOptions, query = compileFileSearch(options.search)): PreviewRecord[] {
   const filters = Object.entries(options.filters)
     .map(([id, value]) => [id, normalized(value.trim())] as const)
     .filter(([, value]) => value !== '')
   const visible = records.filter(record => {
     if (options.matchedOnly && record.row.status === 'unmatched') return false
-    if (query && !Object.values(record.values).some(value => includesQuery(value, query))) return false
+    if (!query.matches(record)) return false
     return filters.every(([id, filter]) => includesQuery(record.values[id], filter))
   })
   const sort = options.sort

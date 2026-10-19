@@ -54,7 +54,38 @@ Use **Columns** to add or remove any supported metadata field, including calcula
 
 Drag a header edge to resize it, or focus the edge and use the arrow keys (Shift for larger steps). Double-click an edge to restore its default width. Click any column heading to cycle through ascending, descending, and original order. Numbers and dates sort by value; missing metadata stays last. Sorting and searching change only the view, so rename sequence numbers and destinations remain stable.
 
-The search box checks names and all available metadata, including hidden columns. Turn on **Filters** to enter a different search in each visible column, for example Camera contains `Fujifilm` and From contains `1045`. Searches ignore case, and a file must match every active filter as well as the global search. Collapsing the filters keeps them active; removing a column clears its filter. **Clear filters** restores the full view. The header checkbox selects or deselects only the visible files; renaming still applies to all selected matches, including those outside the current search.
+The search box checks names and all available metadata, including hidden columns. Combine plain words with precise filters; open **Syntax** beside the search for help and clickable examples:
+
+```text
+type:image date>2024 date<2026 size<24MB aspect:landscape
+(ext:jpg OR ext:png) NOT name:copy
+"summer trip" camera="Fujifilm X100VI" width>=1920
+NOT has:taken
+```
+
+Spaces mean **AND**. Use uppercase `OR` for alternatives, `NOT` (or a leading `-`) for exclusions, and parentheses to group any combination. NOT binds first, then AND, then OR. Words can match different metadata fields; quote a phrase to keep its words together. Quotes also let you search literal punctuation or words such as `"OR"`. Searches ignore case.
+
+| Filter | Meaning |
+| --- | --- |
+| `type:image` | Images; also `video`, `audio`, `document`, `archive`, their plurals, or a full MIME type such as `image/jpeg`. Common extensions provide a fallback when MIME metadata is unavailable. |
+| `ext:jpg` | Exact extension, with or without a leading dot |
+| `size<24MB` | File size comparison; `filesize` is an alias. Accepts bytes, decimal KB/MB/GB/TB, or binary KiB/MiB/GiB/TiB. Spaces are optional: `size < 24 MB`. |
+| `date>2024 date<2026` | Modified during 2025. `date` is an alias for `modified`; use `taken` for photo capture dates. |
+| `date:2025-06` | Modified during June 2025; dates accept `YYYY`, `YYYY-MM`, or `YYYY-MM-DD` and use UTC. |
+| `aspect:landscape` | Landscape, portrait, or square; `orientation` accepts these too. Ratios such as `aspect:16:9`, `aspect:3x2`, and comparisons such as `aspect>1` use width divided by height. |
+| `width>=1920 height>=1080` | Image dimensions in pixels; `megapixels` accepts numeric comparisons too |
+| `name:holiday` / `name="holiday.jpg"` | Filename including extension: contains text / equals the entire name |
+| `path:"Summer trip"` | Source relative path (`from` is an alias); `to` searches the proposed path or displayed status |
+| `camera:"Fujifilm"` | Text within the camera metadata |
+| `has:taken` | Requires a value; `NOT has:taken` finds files without it |
+| `metadata.lensModel:"Summilux"` | Any available embedded metadata field, with case-insensitive field names |
+| `status:ready` / `index<=10` | Preview status or selected-match sequence; `status:"no match"` and `status:excluded` are also supported |
+
+Text filters use `:` for contains and `=` or `!=` for exact equality or inequality. Type, extension, orientation, and status match exactly with `:` too. Numeric filters accept `:`, `=`, `!=`, `<`, `<=`, `>`, and `>=`. Additional text fields are `dimensions` and `uuid`.
+
+Dates compare whole calendar periods: `date>2024` starts in 2025, `date>=2024` includes 2024, and `date<=2025` includes all of 2025. `date:2025` and `date=2025` both match that entire year. Missing metadata never satisfies a direct comparison, including `!=`; negation can include missing values. Invalid or incomplete filters show a hint and no results until corrected.
+
+Turn on **Filters** to enter a different contains search in each visible column, for example Camera contains `Fujifilm` and From contains `1045`. A file must match every active column filter as well as the global query. Collapsing the filters keeps them active; removing a column clears its filter. **Clear filters** restores the full view. The header checkbox selects or deselects only the visible files; renaming still applies to all selected matches, including those outside the current search.
 
 ## Naming rules
 
@@ -146,5 +177,7 @@ API references: [Chrome File System Access guide](https://developer.chrome.com/d
 - `src/components/TemplateLibrary.tsx` — grouped, searchable template picker
 - `src/components/PreviewTable.tsx` — column management, resizing, and table controls
 - `src/lib/preview-table.ts` — metadata column values, filtering, and stable sorting
+- `src/lib/file-search.ts` — composable search parsing, typed comparisons, and metadata matching
+- `src/components/FileSearch.tsx` — search field, syntax guide, and inline validation
 
 The `@/` alias and `components.json` are configured for adding further shadcn components.

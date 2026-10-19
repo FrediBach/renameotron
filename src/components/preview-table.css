@@ -2,7 +2,9 @@
 .preview-panel .preview-heading { height: 42px; padding-inline: 14px; gap: 12px; }
 .preview-heading .activity-button { min-height: 32px; }
 .preview-panel .preview-table-toolbar { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: 6px; padding: 0 14px 10px; }
-.preview-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; }
+.preview-controls { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 10px; min-width: 0; }
+.preview-controls .view-tabs { justify-self: start; }
+.preview-view-actions { grid-column: 2; grid-row: 1; }
 .preview-controls .view-tabs { padding: 2px; }
 .preview-controls .view-tabs button { min-height: 28px; gap: 7px; padding: 2px 8px; font-size: var(--text-small); white-space: nowrap; }
 .preview-search-row, .preview-view-actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
