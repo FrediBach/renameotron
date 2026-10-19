@@ -95,6 +95,18 @@ describe('metadata autocomplete', () => {
     expect(screen.getByRole('listbox', { name: 'Metadata modifiers' })).toBeTruthy()
   })
 
+  it('resets the active suggestion when editing and returning to an earlier query', async () => {
+    const user = userEvent.setup()
+    render(<Editor initialValue="{name|}" />)
+    await focusAt(user, '{name|'.length)
+    await user.keyboard('{ArrowDown}')
+    expect(screen.getByRole('option', { selected: true }).textContent).toMatch(/^upper/)
+    await user.keyboard('lo')
+    expect(screen.getByRole('option', { selected: true }).textContent).toMatch(/^lower/)
+    await user.keyboard('{Backspace}{Backspace}')
+    expect(screen.getByRole('option', { selected: true }).textContent).toMatch(/^lower/)
+  })
+
   it('supports arrow navigation, Escape, and reopening after another edit', async () => {
     const user = userEvent.setup()
     render(<Editor initialValue="{name|}" />)

@@ -32,22 +32,7 @@ export function MetadataPatternBuilder({ initialToken = 'name', file, index, onI
   const selectedModifier = MODIFIER_DEFINITIONS.find(candidate => candidate.key === modifierKey)!
   const pattern = `{${tokenKey}${format ? `:${format}` : ''}${modifiers.map(modifier => `|${modifier.expression}`).join('')}}`
   const isDate = tokenKey === 'modified' || tokenKey === 'taken'
-  let value: string | undefined
-  let error: string | undefined
-  try {
-    const parsed = scanMetadataTokens(pattern, true)
-    if (parsed.length !== 1 || !parsed[0].complete || parsed[0].end !== pattern.length || parsed[0].error) {
-      throw new Error(parsed[0]?.error ?? 'Check the modifier syntax and close any quotes or parentheses.')
-    }
-    validateTokenFormat(tokenKey, parsed[0].format)
-    validateMetadataModifiers(parsed[0].modifiers)
-    if (file) {
-      if (tokenKey === 'index' && index === undefined) throw new Error('Select this file and match its name to assign a sequence number.')
-      value = resolveFileToken(file, tokenKey, parsed[0].format, index ?? 1, parsed[0].modifiers)
-    }
-  } catch (caught) {
-    error = caught instanceof Error ? caught.message : 'Could not format this value.'
-  }
+  const { value, error } = previewMetadataPattern(pattern, tokenKey, file, index)
 
   function moveModifier(position: number, delta: number) {
     setModifiers(current => {
@@ -110,4 +95,25 @@ export function MetadataPatternBuilder({ initialToken = 'name', file, index, onI
     <p className="modifier-help">Insert adds this token to the end of your name pattern. The file list checks the complete names for conflicts.</p>
     <div className="metadata-builder-actions"><Button disabled={!!error} onClick={() => onInsert(pattern)}>Insert pattern<Plus size={15} /></Button></div>
   </div>
+}
+
+function previewMetadataPattern(pattern: string, tokenKey: string, file?: FileEntry, index?: number) {
+  let value: string | undefined
+  let error: string | undefined
+  try {
+    const parsed = scanMetadataTokens(pattern, true)
+    if (parsed.length !== 1 || !parsed[0].complete || parsed[0].end !== pattern.length || parsed[0].error) {
+      throw new Error(parsed[0]?.error ?? 'Check the modifier syntax and close any quotes or parentheses.')
+    }
+    validateTokenFormat(tokenKey, parsed[0].format)
+    validateMetadataModifiers(parsed[0].modifiers)
+    if (file) {
+      if (tokenKey === 'index' && index === undefined) throw new Error('Select this file and match its name to assign a sequence number.')
+      value = resolveFileToken(file, tokenKey, parsed[0].format, index ?? 1, parsed[0].modifiers)
+    }
+  } catch (caught) {
+    error = caught instanceof Error ? caught.message : 'Could not format this value.'
+  }
+
+  return { value, error }
 }

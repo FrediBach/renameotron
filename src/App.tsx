@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCheck, CircleHelp, Copy, Folder, FolderOpen, History, Image, Layers3, LoaderCircle, LockKeyhole, Plus, RotateCcw, SlidersHorizontal, Sparkles, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCheck, CircleHelp, Folder, FolderOpen, History, Image, Layers3, LoaderCircle, LockKeyhole, Plus, RotateCcw, SlidersHorizontal, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
@@ -10,15 +10,16 @@ import { FileMetadataDialog } from '@/components/FileMetadataDialog'
 import { MetadataPatternBuilder } from '@/components/MetadataPatternBuilder'
 import { TemplateLibrary } from '@/components/TemplateLibrary'
 import { MODIFIER_DEFINITIONS } from '@/lib/metadata-modifiers'
-import { compileHighlightRegex } from '@/lib/match-highlights'
-import { captureLabel, tokenizeRegex } from '@/lib/pattern-highlights'
+import { useRenamePreview } from '@/hooks/useRenamePreview'
+import { captureLabel } from '@/lib/pattern-highlights'
 import { buildRenamePlan, formatBytes, TOKEN_DEFINITIONS, type FileEntry } from '@/lib/rename'
 import { TEMPLATES, type RenameTemplate } from '@/lib/templates'
 import { createDemoFiles } from '@/lib/demo'
 import { applyRenamePlan, pickDirectory, scanDirectory } from '@/lib/filesystem'
 
-type Receipt = { source: string; destination: string; success: boolean; error?: string }
-type SavedRun = { id: string; at: string; demo: boolean; results: Receipt[] }
+import type { Receipt, SavedRun } from '@/lib/activity'
+import { ActivityDialog } from '@/components/ActivityDialog'
+import { RenameConfirmationDialog } from '@/components/RenameConfirmationDialog'
 const DEFAULT_PATTERN = '^IMG_(\\d+)\\.(jpg|png)$'
 const DEFAULT_REPLACEMENT = 'studio-{index|pad(3)}.{ext|lower}'
 
@@ -44,7 +45,7 @@ export default function App() {
   const [notice, setNotice] = useState<{ message: string; error?: boolean } | null>(null)
   const [filter, setFilter] = useState<'all' | 'matched'>('all')
   const [search, setSearch] = useState('')
-  const [previewResetKey, setPreviewResetKey] = useState(0)
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({})
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [modal, setModal] = useState<'templates' | 'guide' | 'confirm' | 'history' | 'save' | 'metadata' | 'modifiers' | null>(null)
   const [inspectedFileId, setInspectedFileId] = useState<string | null>(null)
@@ -61,13 +62,9 @@ export default function App() {
   const [showTokens, setShowTokens] = useState(false)
   const demo = directory === null
   const flags = `${globalMatch ? 'g' : ''}${ignoreCase ? 'i' : ''}`
-  const plan = useMemo(() => buildRenamePlan(files, pattern, replacement, flags, selectedIds), [files, pattern, replacement, flags, selectedIds])
-  const highlightRegex = useMemo(() => compileHighlightRegex(pattern, flags), [pattern, flags])
-  const captureGroups = useMemo(() => tokenizeRegex(pattern).groups, [pattern])
-  const inspectedFile = files.find(file => file.id === inspectedFileId)
-  const inspectedIndex = plan.rows.filter(row => row.status !== 'unmatched').findIndex(row => row.file.id === inspectedFileId) + 1
-  const totalSize = files.reduce((size, file) => size + file.size, 0)
-  const canRename = plan.readyCount > 0 && plan.errorCount === 0 && !plan.error && !busy
+  const { plan, highlightRegex, captureGroups, inspectedFile, inspectedIndex, totalSize, canRename } = useRenamePreview({
+    files, pattern, replacement, flags, selectedIds, inspectedFileId, busy,
+  })
 
   useEffect(() => {
     if (!notice || notice.error) return
@@ -88,7 +85,7 @@ export default function App() {
     setFiles(next)
     setSelectedIds(current => new Set(next.filter(file => !preserveSelection || !previousIds.has(file.id) || current.has(file.id)).map(file => file.id)))
     setSearch('')
-    setPreviewResetKey(current => current + 1)
+    setColumnFilters({})
     setInspectedFileId(null)
   }
 
@@ -182,11 +179,7 @@ export default function App() {
     </header>
 
     <main aria-label="Batch rename files">
-      <section className="folder-bar" aria-label="Selected folder">
-        <div className="folder-symbol"><FolderOpen size={23} strokeWidth={1.5} /></div>
-        <div className="folder-details"><div><h2>{demo ? 'Studio selects' : directory.name}</h2>{demo && <span className="demo-badge">DEMO FOLDER</span>}</div><p>{files.length} files <span>·</span> {formatBytes(totalSize)} <span>·</span> {demo ? 'A few sample files to make yourself at home.' : 'Connected to your device'}</p></div>
-        <div className="folder-actions">{!demo && <Button variant="ghost" size="icon" aria-label="Refresh folder" disabled={busy} onClick={() => void rescan()}><RotateCcw size={16} /></Button>}<Button variant="outline" disabled={busy} onClick={() => void openFolder()}>{busy ? <LoaderCircle className="spin" size={15} /> : <Folder size={15} />}Open folder<ArrowUpRight size={14} /></Button></div>
-      </section>
+      <FolderBar demo={demo} directoryName={directory?.name} fileCount={files.length} totalSize={totalSize} busy={busy} onRefresh={() => void rescan()} onOpen={() => void openFolder()} />
 
       <div className="workspace" inert={busy}>
         <aside className="rule-panel" aria-label="Rename rule">
@@ -220,7 +213,7 @@ export default function App() {
           <PreviewTable
             files={files} plan={plan} selectedIds={selectedIds} highlightRegex={highlightRegex}
             search={search} onSearchChange={setSearch} filter={filter} onFilterChange={setFilter}
-            resetKey={previewResetKey} onColumnsOpenChange={setColumnsOpen}
+            filters={columnFilters} setFilters={setColumnFilters} onColumnsOpenChange={setColumnsOpen}
             onToggleFile={toggleFile} onInspect={inspectFile}
             onSelectFiles={(ids, selected) => setSelectedIds(current => {
               const next = new Set(current)
@@ -229,7 +222,7 @@ export default function App() {
             })}
           />
           <div className="preview-legend"><span><span className="ready-dot" />{plan.readyCount} will be renamed</span><span><span className="neutral-dot" />{files.length - plan.readyCount - plan.errorCount} unchanged</span>{plan.errorCount > 0 && <span className="error-text">{plan.errorCount} conflicts</span>}<span className="metadata-row-hint">Click a row for metadata</span></div>
-          <div className="rename-action"><div><span className="action-icon"><CheckCheck size={19} /></span><div><strong>{busy ? progress : plan.errorCount ? 'A few names need a second look.' : plan.readyCount ? `${plan.readyCount} files. Ready when you are.` : 'Your files are in good company.'}</strong><p>{demo ? 'Try it out. These are only sample files.' : 'Review the new names before applying changes.'}</p></div></div><Button disabled={!canRename} onClick={() => setModal('confirm')}>{busy ? <LoaderCircle size={15} className="spin" /> : null}Rename {plan.readyCount} files<ArrowRight size={16} /></Button></div>
+          <RenameAction plan={plan} busy={busy} progress={progress} demo={demo} canRename={canRename} onConfirm={() => setModal('confirm')} />
         </section>
       </div>
 
@@ -238,7 +231,10 @@ export default function App() {
 
     <footer className="site-footer"><span>Less, but better named.</span><span>RENAMEOTRON <span className="footer-slash">/</span> V.01</span></footer>
 
-    {notice && <div className={`toast ${notice.error ? 'toast-error' : ''}`} role={notice.error ? 'alert' : 'status'}><span>{notice.error ? <CircleHelp size={18} /> : <Check size={18} />}</span><p>{notice.message}</p>{demoUndo && !notice.error && <button onClick={() => { loadFiles(demoUndo, true); setDemoUndo(null); setNotice({ message: 'Demo rename undone.' }) }}>Undo</button>}<button aria-label="Dismiss notification" onClick={() => setNotice(null)}><X size={16} /></button></div>}
+    {notice && <NoticeToast notice={notice} canUndo={!!demoUndo} onDismiss={() => setNotice(null)} onUndo={() => {
+      if (!demoUndo) return
+      loadFiles(demoUndo, true); setDemoUndo(null); setNotice({ message: 'Demo rename undone.' })
+    }} />}
 
     <FileMetadataDialog
       file={inspectedFile}
@@ -290,10 +286,48 @@ export default function App() {
 
     <Dialog open={modal === 'guide'} onOpenChange={open => !open && setModal(null)}><DialogContent className="guide-dialog"><p className="eyebrow">A QUICK FIELD GUIDE</p><DialogTitle>A little logic. A lot of order.</DialogTitle><DialogDescription>Open a folder, write a rule, and check the preview. Only the Rename button changes your files.</DialogDescription><div className="guide-steps"><p><b>01</b><span><strong>Find what matters.</strong> Your regular expression matches the filename, including its extension. Use parentheses to capture a part you want to keep.</span></p><p><b>02</b><span><strong>Make it your own.</strong> Use <code>$1</code> for the first capture, or add metadata with <code>{'{…}'}</code>. Type <code>{'{'}</code> for suggestions.</span></p><p><b>03</b><span><strong>Review, then rename.</strong> Uncheck files to exclude them. Conflicts and missing metadata are flagged before anything changes.</span></p></div><div className="guide-example"><code>^IMG_(\d+)\.jpg$</code><ArrowDown size={15} /><code>photo-$1.{'{ext}'}</code><p>IMG_1042.jpg <ArrowRight size={12} /> photo-1042.jpg</p></div><h3>The useful little details</h3><div className="guide-tokens">{TOKEN_DEFINITIONS.map(token => <div key={token.key}><code>{token.example}</code><span>{token.description}</span></div>)}</div><h3>Make metadata your own</h3><p className="guide-note">Chain modifiers with <code>|</code> in the order they should run: <code>{'{name|trim|lower|whitespace("-")}'}</code>. Text arguments use quotes. The Modifiers builder lets you preview and reorder each step.</p><div className="guide-tokens">{MODIFIER_DEFINITIONS.map(modifier => <div key={modifier.key}><code>{modifier.example}</code><span>{modifier.description}</span></div>)}</div><p className="guide-note">Plain filenames stay in their current folder. Paths with <code>/</code> start at your selected folder. Photo metadata comes from embedded EXIF; modification dates come from the filesystem. Desktop Chrome or Edge is needed for local folder access. Native rename support varies; copy & delete is available as an explicit alternative.</p></DialogContent></Dialog>
 
-    <Dialog open={modal === 'confirm'} onOpenChange={open => !open && setModal(null)}><DialogContent className="confirm-dialog"><span className="modal-symbol"><FolderOpen size={26} strokeWidth={1.5} /></span><DialogTitle>A new name for {plan.readyCount} files.</DialogTitle><DialogDescription>{demo ? 'This is a practice run with sample files. Your device’s files won’t be changed.' : `Apply the previewed names in “${directory.name}”. New subfolders will be created where needed.`}</DialogDescription><div className="confirmation-preview">{plan.rows.filter(row => row.status === 'ready').slice(0, 3).map(row => <div key={row.file.id}><span>{row.file.path}</span><ArrowRight size={13} /><strong>{row.targetPath}</strong></div>)}{plan.readyCount > 3 && <p>and {plan.readyCount - 3} more files</p>}</div>{!demo && <><fieldset className="method-choice"><legend>Rename method</legend><label><input type="radio" name="rename-method" checked={method === 'native'} onChange={() => setMethod('native')} /><span><strong>Native rename</strong><small>Fast, without copying. Requires browser support.</small></span></label><label><input type="radio" name="rename-method" checked={method === 'copy'} onChange={() => setMethod('copy')} /><span><strong>Copy & delete</strong><small>Copies each file, checks its size, then removes the original. Needs extra disk space; filesystem timestamps may change.</small></span></label></fieldset><p className="confirm-note">Batches can partially complete. Existing names are never intentionally overwritten. There is no automatic undo for local files; an activity receipt records every attempted change.</p></>}<div className="dialog-actions"><Button variant="outline" onClick={() => setModal(null)}>Keep editing</Button><Button onClick={() => void executeRename()} disabled={!canRename}>{demo ? 'Try the rename' : `Rename ${plan.readyCount} files`}<ArrowRight size={15} /></Button></div></DialogContent></Dialog>
+    <RenameConfirmationDialog open={modal === 'confirm'} onOpenChange={open => !open && setModal(null)}
+      plan={plan} demo={demo} directoryName={directory?.name} method={method} onMethodChange={setMethod}
+      canRename={canRename} onConfirm={() => void executeRename()} />
 
     <Dialog open={modal === 'save'} onOpenChange={open => !open && setModal(null)}><DialogContent><p className="eyebrow">KEEP A GOOD IDEA</p><DialogTitle>Save your naming rule.</DialogTitle><DialogDescription>Available in this browser, whenever you need it.</DialogDescription><form onSubmit={event => { event.preventDefault(); saveTemplate() }}><label className="save-label" htmlFor="template-name">Template name</label><input id="template-name" className="text-input" value={templateName} onChange={event => setTemplateName(event.target.value)} placeholder="e.g. Monthly studio archive" maxLength={80} /><div className="saved-pattern"><code>{pattern}</code><ArrowDown size={13} /><code>{replacement}</code></div><div className="dialog-actions"><Button type="button" variant="outline" onClick={() => setModal(null)}>Cancel</Button><Button type="submit" disabled={!templateName.trim()}>Save template<Plus size={15} /></Button></div></form></DialogContent></Dialog>
 
-    <Dialog open={modal === 'history'} onOpenChange={open => !open && setModal(null)}><DialogContent className="history-dialog"><p className="eyebrow">A RECORD OF THE LITTLE THINGS</p><DialogTitle>Your activity.</DialogTitle><DialogDescription>Rename results from this session, one file at a time.</DialogDescription>{history.length === 0 ? <div className="empty-state"><History size={27} /><h3>A fresh start.</h3><p>Your completed renames will appear here.</p></div> : <><div className="history-list">{history.map(run => <section key={run.id}><h3>{run.results.filter(result => result.success).length} files renamed <span>{run.demo ? 'Demo · ' : ''}{run.at}</span></h3>{run.results.map(result => <div className={result.success ? '' : 'error-text'} key={result.source}><span>{result.success ? <Check size={13} /> : <X size={13} />}</span><p><span>{result.source}</span><strong>{result.destination}</strong>{result.error && <small>{result.error}</small>}</p></div>)}</section>)}</div><div className="dialog-actions"><Button variant="outline" onClick={downloadReceipt}><Copy size={14} />Export receipt</Button></div></>}</DialogContent></Dialog>
+    <ActivityDialog open={modal === 'history'} onOpenChange={open => !open && setModal(null)} history={history} onExport={downloadReceipt} />
   </div>
+}
+
+function FolderBar({ demo, directoryName, fileCount, totalSize, busy, onRefresh, onOpen }: {
+  demo: boolean
+  directoryName?: string
+  fileCount: number
+  totalSize: number
+  busy: boolean
+  onRefresh: () => void
+  onOpen: () => void
+}) {
+  return <section className="folder-bar" aria-label="Selected folder">
+        <div className="folder-symbol"><FolderOpen size={23} strokeWidth={1.5} /></div>
+        <div className="folder-details"><div><h2>{demo ? 'Studio selects' : directoryName}</h2>{demo && <span className="demo-badge">DEMO FOLDER</span>}</div><p>{fileCount} files <span>·</span> {formatBytes(totalSize)} <span>·</span> {demo ? 'A few sample files to make yourself at home.' : 'Connected to your device'}</p></div>
+        <div className="folder-actions">{!demo && <Button variant="ghost" size="icon" aria-label="Refresh folder" disabled={busy} onClick={onRefresh}><RotateCcw size={16} /></Button>}<Button variant="outline" disabled={busy} onClick={onOpen}>{busy ? <LoaderCircle className="spin" size={15} /> : <Folder size={15} />}Open folder<ArrowUpRight size={14} /></Button></div>
+      </section>
+}
+
+function RenameAction({ plan, busy, progress, demo, canRename, onConfirm }: {
+  plan: ReturnType<typeof buildRenamePlan>
+  busy: boolean
+  progress: string
+  demo: boolean
+  canRename: boolean
+  onConfirm: () => void
+}) {
+  return <div className="rename-action"><div><span className="action-icon"><CheckCheck size={19} /></span><div><strong>{busy ? progress : plan.errorCount ? 'A few names need a second look.' : plan.readyCount ? `${plan.readyCount} files. Ready when you are.` : 'Your files are in good company.'}</strong><p>{demo ? 'Try it out. These are only sample files.' : 'Review the new names before applying changes.'}</p></div></div><Button disabled={!canRename} onClick={onConfirm}>{busy ? <LoaderCircle size={15} className="spin" /> : null}Rename {plan.readyCount} files<ArrowRight size={16} /></Button></div>
+}
+
+function NoticeToast({ notice, canUndo, onUndo, onDismiss }: {
+  notice: { message: string; error?: boolean }
+  canUndo: boolean
+  onUndo: () => void
+  onDismiss: () => void
+}) {
+  return <div className={`toast ${notice.error ? 'toast-error' : ''}`} role={notice.error ? 'alert' : 'status'}><span>{notice.error ? <CircleHelp size={18} /> : <Check size={18} />}</span><p>{notice.message}</p>{canUndo && !notice.error && <button onClick={onUndo}>Undo</button>}<button aria-label="Dismiss notification" onClick={onDismiss}><X size={16} /></button></div>
 }

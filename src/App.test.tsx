@@ -87,6 +87,38 @@ describe('renameotron workspace', () => {
     expect(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }).getAttribute('aria-checked')).toBe('false')
   })
 
+  it('opens a focused row with Enter or Space without intercepting checkbox keys', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const checkbox = screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' })
+    const row = checkbox.closest('tr')!
+    for (const key of ['{Enter}', ' ']) {
+      row.focus()
+      expect(document.activeElement).toBe(row)
+      await user.keyboard(key)
+      expect(screen.getByRole('dialog', { name: 'File metadata' })).toBeTruthy()
+      await user.keyboard('{Escape}')
+      expect(checkbox.getAttribute('aria-checked')).toBe('true')
+    }
+    checkbox.focus()
+    await user.keyboard(' ')
+    expect(checkbox.getAttribute('aria-checked')).toBe('false')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('starts with the metadata overview when reopening a customized file', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const opener = screen.getByRole('button', { name: 'View metadata for IMG_1042.jpg' })
+    await user.click(opener)
+    await user.click(screen.getByRole('button', { name: 'Customize Camera' }))
+    expect(screen.getByRole('button', { name: 'All metadata' })).toBeTruthy()
+    await user.keyboard('{Escape}')
+    await user.click(opener)
+    expect(screen.queryByRole('button', { name: 'All metadata' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Customize Camera' })).toBeTruthy()
+  })
+
   it('opens metadata with the keyboard and inserts a usable token into the pattern', async () => {
     const user = userEvent.setup()
     render(<App />)

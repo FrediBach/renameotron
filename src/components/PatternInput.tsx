@@ -32,22 +32,13 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
   const menuRef = useRef<HTMLDivElement>(null)
   const [focused, setFocused] = useState(false)
   const [cursor, setCursor] = useState(value.length)
-  const [activeIndex, setActiveIndex] = useState(0)
+  const [navigation, setNavigation] = useState<{ value: string; cursor: number; index: number } | null>(null)
   const [dismissed, setDismissed] = useState(false)
-  const precedingToken = kind === 'replacement' ? scanMetadataTokens(value.slice(0, cursor), true).at(-1) : undefined
-  const activeToken = precedingToken && !precedingToken.complete && precedingToken.end === cursor ? precedingToken : undefined
-  const completingModifier = !!activeToken?.modifiers.length
-  const partialModifier = activeToken?.modifiers.at(-1)
-  const query = completingModifier
-    ? (partialModifier && !/^\s*[a-z]*$/i.test(partialModifier) ? undefined : partialModifier?.trim().toLowerCase())
-    : activeToken ? value.slice(activeToken.start + 1, cursor).toLowerCase() : undefined
-  const definitions = completingModifier ? MODIFIER_DEFINITIONS : TOKEN_DEFINITIONS
-  const suggestions = query === undefined ? [] : definitions.filter((token) => (
-    tokenKey(token.key).toLowerCase().includes(query)
-    || tokenKey(token.example).toLowerCase().includes(query)
-    || token.label.toLowerCase().includes(query)
-  ))
+  const completion = getCompletion(value, cursor, kind)
+  const { suggestions, completingModifier } = completion
   const isOpen = focused && !dismissed && suggestions.length > 0
+  const activeIndex = navigation?.value === value && navigation.cursor === cursor ? navigation.index : 0
+  const setActiveIndex = (index: number) => setNavigation({ value, cursor, index })
   const selectedIndex = Math.min(activeIndex, Math.max(0, suggestions.length - 1))
   const menuId = `${id}-suggestions`
 
@@ -58,7 +49,6 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
   }, [inputRef])
 
   useLayoutEffect(syncScroll, [value, syncScroll])
-  useEffect(() => setActiveIndex(0), [query])
   useEffect(() => {
     if (!isOpen || !menuRef.current) return
     const option = menuRef.current.children[selectedIndex] as HTMLElement | undefined
@@ -73,28 +63,9 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
   }, [isOpen, selectedIndex])
 
   const insertToken = (key: string) => {
-    if (!activeToken) return
-    const wholeToken = scanMetadataTokens(value, true).find(token => token.start === activeToken.start) ?? activeToken
-    let next: string
-    let nextCursor: number
-    if (completingModifier) {
-      const start = cursor - (partialModifier?.length ?? 0)
-      const segmentLength = wholeToken.modifiers[activeToken.modifiers.length - 1]?.length ?? partialModifier?.length ?? 0
-      const end = start + segmentLength
-      const closing = wholeToken.complete ? '' : '}'
-      next = value.slice(0, start) + key + value.slice(end, wholeToken.end) + closing + value.slice(wholeToken.end)
-      nextCursor = start + key.length
-      if (next[nextCursor] === '}') nextCursor++
-    } else {
-      const token = tokenKey(key)
-      const chain = wholeToken.modifiers.length ? `|${wholeToken.modifiers.join('|')}` : ''
-      const expression = `{${token}${chain}}`
-      // Empty braces are literal to the scanner, but their closing brace can
-      // still be reused when the user completes a metadata key between them.
-      const end = !wholeToken.complete && value[wholeToken.end] === '}' ? wholeToken.end + 1 : wholeToken.end
-      next = value.slice(0, activeToken.start) + expression + value.slice(end)
-      nextCursor = activeToken.start + expression.length
-    }
+    const result = completeToken(value, cursor, key, completion)
+    if (!result) return
+    const { next, nextCursor } = result
     onChange(next)
     setCursor(nextCursor)
     setDismissed(true)
@@ -121,6 +92,12 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
     }
   }
 
+  const autocompleteProps = kind === 'replacement' ? {
+    role: 'combobox' as const,
+    'aria-autocomplete': 'list' as const,
+    'aria-expanded': isOpen,
+  } : {}
+
   return (
     <div className={`pattern-input-wrap${invalid ? ' is-invalid' : ''}`}>
       <pre ref={highlightRef} className="pattern-highlight" aria-hidden="true">
@@ -139,23 +116,27 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
         autoCorrect="off"
         autoCapitalize="off"
         aria-invalid={invalid || undefined}
-        role={kind === 'replacement' ? 'combobox' : undefined}
-        aria-autocomplete={kind === 'replacement' ? 'list' : undefined}
-        aria-expanded={kind === 'replacement' ? isOpen : undefined}
+        {...autocompleteProps}
         aria-controls={isOpen ? menuId : undefined}
         aria-activedescendant={isOpen ? `${menuId}-${selectedIndex}` : undefined}
         onChange={(event) => {
+          setNavigation(null)
           setCursor(event.currentTarget.selectionStart ?? event.currentTarget.value.length)
           setDismissed(false)
           onChange(event.currentTarget.value)
         }}
         onFocus={(event) => {
+          setNavigation(null)
           setFocused(true)
           setCursor(event.currentTarget.selectionStart ?? value.length)
           setDismissed(false)
         }}
         onBlur={() => setFocused(false)}
-        onSelect={(event) => setCursor(event.currentTarget.selectionStart ?? value.length)}
+        onSelect={(event) => {
+          const nextCursor = event.currentTarget.selectionStart ?? value.length
+          if (nextCursor !== cursor) setNavigation(null)
+          setCursor(nextCursor)
+        }}
         onScroll={syncScroll}
         onKeyDown={handleKeyDown}
       />
@@ -185,4 +166,47 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
       )}
     </div>
   )
+}
+
+function getCompletion(value: string, cursor: number, kind: PatternInputProps['kind']) {
+  const precedingToken = kind === 'replacement' ? scanMetadataTokens(value.slice(0, cursor), true).at(-1) : undefined
+  const activeToken = precedingToken && !precedingToken.complete && precedingToken.end === cursor ? precedingToken : undefined
+  const completingModifier = !!activeToken?.modifiers.length
+  const partialModifier = activeToken?.modifiers.at(-1)
+  const query = completingModifier
+    ? (partialModifier && !/^\s*[a-z]*$/i.test(partialModifier) ? undefined : partialModifier?.trim().toLowerCase())
+    : activeToken ? value.slice(activeToken.start + 1, cursor).toLowerCase() : undefined
+  const definitions = completingModifier ? MODIFIER_DEFINITIONS : TOKEN_DEFINITIONS
+  const suggestions = query === undefined ? [] : definitions.filter((token) => (
+    tokenKey(token.key).toLowerCase().includes(query)
+    || tokenKey(token.example).toLowerCase().includes(query)
+    || token.label.toLowerCase().includes(query)
+  ))
+  return { activeToken, completingModifier, partialModifier, suggestions }
+}
+
+function completeToken(value: string, cursor: number, key: string, { activeToken, completingModifier, partialModifier }: ReturnType<typeof getCompletion>) {
+  if (!activeToken) return
+  const wholeToken = scanMetadataTokens(value, true).find(token => token.start === activeToken.start) ?? activeToken
+  let next: string
+  let nextCursor: number
+  if (completingModifier) {
+    const start = cursor - (partialModifier?.length ?? 0)
+    const segmentLength = wholeToken.modifiers[activeToken.modifiers.length - 1]?.length ?? partialModifier?.length ?? 0
+    const end = start + segmentLength
+    const closing = wholeToken.complete ? '' : '}'
+    next = value.slice(0, start) + key + value.slice(end, wholeToken.end) + closing + value.slice(wholeToken.end)
+    nextCursor = start + key.length
+    if (next[nextCursor] === '}') nextCursor++
+  } else {
+    const token = tokenKey(key)
+    const chain = wholeToken.modifiers.length ? `|${wholeToken.modifiers.join('|')}` : ''
+    const expression = `{${token}${chain}}`
+    // Empty braces are literal to the scanner, but their closing brace can
+    // still be reused when the user completes a metadata key between them.
+    const end = !wholeToken.complete && value[wholeToken.end] === '}' ? wholeToken.end + 1 : wholeToken.end
+    next = value.slice(0, activeToken.start) + expression + value.slice(end)
+    nextCursor = activeToken.start + expression.length
+  }
+  return { next, nextCursor }
 }

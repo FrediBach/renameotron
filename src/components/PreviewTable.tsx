@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject, type Dispatch, type SetStateAction, type PointerEvent } from 'react'
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ArrowUpDown, Check, Columns3, File, FileImage, FileText, Info, ListFilter, RotateCcw, Search, X } from 'lucide-react'
 import { Button } from './ui/button'
 import { Checkbox } from './ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog'
 import { MatchedFilename } from './MatchedFilename'
 import { HighlightedText } from './HighlightedText'
-import { buildPreviewRecords, DEFAULT_COLUMN_IDS, getPreviewColumns, selectPreviewRecords, type PreviewColumn, type PreviewSort } from '@/lib/preview-table'
+import { buildPreviewRecords, DEFAULT_COLUMN_IDS, getPreviewColumns, selectPreviewRecords, type PreviewRecord, type PreviewColumn, type PreviewSort } from '@/lib/preview-table'
 import type { FileEntry, RenamePlan } from '@/lib/rename'
 import './preview-table.css'
 
@@ -47,16 +47,16 @@ interface PreviewTableProps {
   onSearchChange: (value: string) => void
   filter: 'all' | 'matched'
   onFilterChange: (value: 'all' | 'matched') => void
-  resetKey: number
+  filters: Record<string, string>
+  setFilters: Dispatch<SetStateAction<Record<string, string>>>
   onColumnsOpenChange: (open: boolean) => void
 }
 
-export function PreviewTable({ files, plan, selectedIds, onToggleFile, onSelectFiles, onInspect, highlightRegex, search, onSearchChange, filter, onFilterChange, resetKey, onColumnsOpenChange }: PreviewTableProps) {
+export function PreviewTable({ files, plan, selectedIds, onToggleFile, onSelectFiles, onInspect, highlightRegex, search, onSearchChange, filter, onFilterChange, filters, setFilters, onColumnsOpenChange }: PreviewTableProps) {
   const [settings, setSettings] = useState<ColumnSettings>(readSettings)
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [columnSearch, setColumnSearch] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState<Record<string, string>>({})
   const columnsButton = useRef<HTMLButtonElement>(null)
   const drag = useRef<{ id: string; x: number; width: number } | null>(null)
   const catalog = useMemo(() => getPreviewColumns(files), [files])
@@ -76,7 +76,6 @@ export function PreviewTable({ files, plan, selectedIds, onToggleFile, onSelectF
   useEffect(() => {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)) } catch { /* The table still works when storage is unavailable. */ }
   }, [settings])
-  useEffect(() => { setFilters({}) }, [resetKey])
 
   function openColumns(open: boolean) {
     setColumnsOpen(open)
@@ -115,27 +114,10 @@ export function PreviewTable({ files, plan, selectedIds, onToggleFile, onSelectF
   function clearFilters() { onSearchChange(''); setFilters({}); onFilterChange('all') }
 
   return <>
-    <div className="preview-toolbar preview-table-toolbar">
-      <div className="preview-controls">
-        <div className="view-tabs" role="group" aria-label="Filter files">
-          <button className={filter === 'all' ? 'active' : ''} aria-pressed={filter === 'all'} onClick={() => onFilterChange('all')}>All files<span>{files.length}</span></button>
-          <button className={filter === 'matched' ? 'active' : ''} aria-pressed={filter === 'matched'} onClick={() => onFilterChange('matched')}>Matched<span>{plan.matchedCount}</span></button>
-        </div>
-        <div className="preview-search-row">
-          <div className="file-search"><Search size={14} /><input aria-label="Search files" placeholder="Search names & metadata…" value={search} onChange={event => onSearchChange(event.target.value)} />{search && <button onClick={() => onSearchChange('')} aria-label="Clear search" title="Clear search"><X size={13} /></button>}</div>
-          <span className="preview-result-count" aria-live="polite" aria-atomic="true">{hasSearch || filter === 'matched' ? `${visible.length} of ${files.length}` : `${files.length} files`}</span>
-        </div>
-        <div className="preview-view-actions">
-          <button className="preview-tool-button" aria-label="Column filters" aria-pressed={showFilters} title="Search within individual columns" onClick={() => setShowFilters(current => !current)}><ListFilter size={14} /><span>Filters</span>{filterCount > 0 && <b>{filterCount}</b>}</button>
-          <button ref={columnsButton} className="preview-tool-button" aria-label="Columns" title="Manage columns" aria-haspopup="dialog" onClick={() => openColumns(true)}><Columns3 size={14} /><span>Columns</span></button>
-        </div>
-      </div>
-      {(showFilters || hasSearch || filter === 'matched') && <div className="preview-filter-summary">
-        {showFilters && <p className="column-filter-hint">Filter columns below. Files must match every filter.</p>}
-        {!showFilters && filterCount > 0 && <div className="active-column-filters">{columns.filter(column => activeFilters[column.id]).map(column => <button key={column.id} title={`Clear ${column.label} filter`} aria-label={`Clear ${column.label} filter`} onClick={() => setFilters(current => { const next = { ...current }; delete next[column.id]; return next })}><span>{column.label}: {activeFilters[column.id]}</span><X size={12} /></button>)}</div>}
-        {(hasSearch || filter === 'matched') && <button className="preview-clear" onClick={clearFilters}><RotateCcw size={12} />Clear filters</button>}
-      </div>}
-    </div>
+    <PreviewToolbar filter={filter} onFilterChange={onFilterChange} fileCount={files.length} matchedCount={plan.matchedCount}
+      search={search} onSearchChange={onSearchChange} hasSearch={hasSearch} visibleCount={visible.length}
+      showFilters={showFilters} setShowFilters={setShowFilters} filterCount={filterCount} columnsButton={columnsButton}
+      openColumns={openColumns} columns={columns} activeFilters={activeFilters} setFilters={setFilters} clearFilters={clearFilters} />
     <div className="file-table-scroll" role="region" aria-label="File rename preview" tabIndex={0}>
       <table className="file-table preview-table" style={{ minWidth: columns.reduce((total, column) => total + columnWidth(column), 80) }}>
         <colgroup><col style={{ width: 44 }} />{columns.map(column => <col key={column.id} style={{ width: columnWidth(column) }} />)}<col style={{ width: 36 }} /><col /></colgroup>
@@ -159,18 +141,8 @@ export function PreviewTable({ files, plan, selectedIds, onToggleFile, onSelectF
           </th>)}
           <th className="status-cell"><span className="sr-only">File status</span></th><th aria-hidden="true" />
         </tr></thead>
-        <tbody>{visible.map(({ row, values }) => {
-          const Icon = row.file.type.startsWith('image/') ? FileImage : row.file.type.includes('text') || row.file.type === 'application/pdf' ? FileText : File
-          return <tr key={row.file.id} className={`file-row ${row.status === 'unmatched' ? 'unmatched-row' : ''} ${row.status === 'error' ? 'error-row' : ''}`} onClick={event => onInspect(row.file, event.currentTarget.querySelector<HTMLButtonElement>('[data-metadata-opener]'))}>
-            <td className="check-cell" onClick={event => event.stopPropagation()}><Checkbox aria-label={`Select ${row.file.name}`} checked={selectedIds.has(row.file.id)} onCheckedChange={() => onToggleFile(row.file.id)} /></td>
-            {columns.map(column => <td key={column.id} className={`preview-data-cell ${column.id === 'size' ? 'preview-size-cell' : ''}`}>
-              {column.id === 'from' ? <button type="button" className="filename-cell" data-metadata-opener aria-label={`View metadata for ${row.file.path}`} aria-haspopup="dialog" title="View file metadata and name patterns" onClick={event => { event.stopPropagation(); onInspect(row.file, event.currentTarget) }}><span className={`file-icon ${row.file.type.startsWith('image/') ? 'is-image' : ''}`}><Icon size={17} strokeWidth={1.5} /></span><MatchedFilename file={row.file} regex={highlightRegex} enabled={row.status !== 'unmatched'} /></button>
-                : column.id === 'to' ? <><span className={`target-name ${row.status === 'ready' ? 'will-rename' : ''}`} title={row.error ?? row.targetPath}>{row.status === 'unmatched' ? <span className="no-match">{selectedIds.has(row.file.id) ? 'No match' : 'Excluded'}</span> : <HighlightedText text={row.targetPath} spans={row.targetHighlights ?? []} />}</span>{row.status === 'error' && <small className="row-error">{row.error}</small>}</>
-                  : <span className={`preview-cell-value ${values[column.id]?.sortValue === null ? 'unavailable-value' : ''}`} title={values[column.id]?.searchText ?? values[column.id]?.text}>{values[column.id]?.text ?? '—'}</span>}
-            </td>)}
-            <td className="status-cell">{!columns.some(column => column.id === 'from') ? <button className="preview-inspect" data-metadata-opener aria-label={`View metadata for ${row.file.path}`} aria-haspopup="dialog" title={row.error ?? values.status.text} onClick={event => { event.stopPropagation(); onInspect(row.file, event.currentTarget) }}>{row.status === 'error' ? <span className="error-mark">!</span> : <Info size={14} />}</button> : row.status === 'ready' ? <span className="ready-dot" title="Ready to rename" /> : row.status === 'error' ? <span className="error-mark" title={row.error}>!</span> : row.status === 'unchanged' ? <Check size={12} /> : null}</td><td aria-hidden="true" />
-          </tr>
-        })}</tbody>
+        <tbody>{visible.map(record => <PreviewRow key={record.row.file.id} record={record} columns={columns}
+          selected={selectedIds.has(record.row.file.id)} onToggleFile={onToggleFile} onInspect={onInspect} highlightRegex={highlightRegex} />)}</tbody>
       </table>
       {visible.length === 0 && <div className="empty-state"><Search size={25} /><h3>{files.length === 0 ? 'A clean slate.' : 'No files in this view.'}</h3><p>{files.length === 0 ? 'Open a folder with a few files to get started.' : 'Try different column filters or clear your search.'}</p>{(hasSearch || filter === 'matched') && <Button variant="outline" size="sm" onClick={clearFilters}>Show all files</Button>}</div>}
     </div>
@@ -192,4 +164,77 @@ export function PreviewTable({ files, plan, selectedIds, onToggleFile, onSelectF
       </DialogContent>
     </Dialog>
   </>
+}
+
+interface PreviewRowProps {
+  record: PreviewRecord
+  columns: PreviewColumn[]
+  selected: boolean
+  onToggleFile: PreviewTableProps['onToggleFile']
+  onInspect: PreviewTableProps['onInspect']
+  highlightRegex: RegExp | null
+}
+
+function PreviewRow({ record: { row, values }, columns, selected, onToggleFile, onInspect, highlightRegex }: PreviewRowProps) {
+  const Icon = row.file.type.startsWith('image/') ? FileImage : row.file.type.includes('text') || row.file.type === 'application/pdf' ? FileText : File
+  return <tr className={`file-row ${row.status === 'unmatched' ? 'unmatched-row' : ''} ${row.status === 'error' ? 'error-row' : ''}`} tabIndex={0} onKeyDown={event => {
+    if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return
+    event.preventDefault()
+    onInspect(row.file, event.currentTarget.querySelector<HTMLButtonElement>('[data-metadata-opener]'))
+  }} onClick={event => onInspect(row.file, event.currentTarget.querySelector<HTMLButtonElement>('[data-metadata-opener]'))}>
+    <td className="check-cell" onClick={event => event.stopPropagation()}><Checkbox aria-label={`Select ${row.file.name}`} checked={selected} onCheckedChange={() => onToggleFile(row.file.id)} /></td>
+    {columns.map(column => <td key={column.id} className={`preview-data-cell ${column.id === 'size' ? 'preview-size-cell' : ''}`}>
+      {column.id === 'from' ? <button type="button" className="filename-cell" data-metadata-opener aria-label={`View metadata for ${row.file.path}`} aria-haspopup="dialog" title="View file metadata and name patterns" onClick={event => { event.stopPropagation(); onInspect(row.file, event.currentTarget) }}><span className={`file-icon ${row.file.type.startsWith('image/') ? 'is-image' : ''}`}><Icon size={17} strokeWidth={1.5} /></span><MatchedFilename file={row.file} regex={highlightRegex} enabled={row.status !== 'unmatched'} /></button>
+        : column.id === 'to' ? <><span className={`target-name ${row.status === 'ready' ? 'will-rename' : ''}`} title={row.error ?? row.targetPath}>{row.status === 'unmatched' ? <span className="no-match">{selected ? 'No match' : 'Excluded'}</span> : <HighlightedText text={row.targetPath} spans={row.targetHighlights ?? []} />}</span>{row.status === 'error' && <small className="row-error">{row.error}</small>}</>
+          : <span className={`preview-cell-value ${values[column.id]?.sortValue === null ? 'unavailable-value' : ''}`} title={values[column.id]?.searchText ?? values[column.id]?.text}>{values[column.id]?.text ?? '—'}</span>}
+    </td>)}
+    <PreviewRowStatus row={row} values={values} hasFilename={columns.some(column => column.id === 'from')} onInspect={onInspect} /><td aria-hidden="true" />
+  </tr>
+}
+
+interface PreviewToolbarProps extends Pick<PreviewTableProps, 'filter' | 'onFilterChange' | 'search' | 'onSearchChange' | 'setFilters'> {
+  fileCount: number
+  matchedCount: number
+  visibleCount: number
+  hasSearch: boolean
+  showFilters: boolean
+  setShowFilters: Dispatch<SetStateAction<boolean>>
+  filterCount: number
+  columnsButton: RefObject<HTMLButtonElement | null>
+  openColumns: (open: boolean) => void
+  columns: PreviewColumn[]
+  activeFilters: Record<string, string>
+  clearFilters: () => void
+}
+
+function PreviewToolbar({ filter, onFilterChange, fileCount, matchedCount, search, onSearchChange, hasSearch, visibleCount,
+  showFilters, setShowFilters, filterCount, columnsButton, openColumns, columns, activeFilters, setFilters, clearFilters }: PreviewToolbarProps) {
+  return <div className="preview-toolbar preview-table-toolbar">
+      <div className="preview-controls">
+        <div className="view-tabs" role="group" aria-label="Filter files">
+          <button className={filter === 'all' ? 'active' : ''} aria-pressed={filter === 'all'} onClick={() => onFilterChange('all')}>All files<span>{fileCount}</span></button>
+          <button className={filter === 'matched' ? 'active' : ''} aria-pressed={filter === 'matched'} onClick={() => onFilterChange('matched')}>Matched<span>{matchedCount}</span></button>
+        </div>
+        <div className="preview-search-row">
+          <div className="file-search"><Search size={14} /><input aria-label="Search files" placeholder="Search names & metadata…" value={search} onChange={event => onSearchChange(event.target.value)} />{search && <button onClick={() => onSearchChange('')} aria-label="Clear search" title="Clear search"><X size={13} /></button>}</div>
+          <span className="preview-result-count" aria-live="polite" aria-atomic="true">{hasSearch || filter === 'matched' ? `${visibleCount} of ${fileCount}` : `${fileCount} files`}</span>
+        </div>
+        <div className="preview-view-actions">
+          <button className="preview-tool-button" aria-label="Column filters" aria-pressed={showFilters} title="Search within individual columns" onClick={() => setShowFilters(current => !current)}><ListFilter size={14} /><span>Filters</span>{filterCount > 0 && <b>{filterCount}</b>}</button>
+          <button ref={columnsButton} className="preview-tool-button" aria-label="Columns" title="Manage columns" aria-haspopup="dialog" onClick={() => openColumns(true)}><Columns3 size={14} /><span>Columns</span></button>
+        </div>
+      </div>
+      {(showFilters || hasSearch || filter === 'matched') && <div className="preview-filter-summary">
+        {showFilters && <p className="column-filter-hint">Filter columns below. Files must match every filter.</p>}
+        {!showFilters && filterCount > 0 && <div className="active-column-filters">{columns.filter(column => activeFilters[column.id]).map(column => <button key={column.id} title={`Clear ${column.label} filter`} aria-label={`Clear ${column.label} filter`} onClick={() => setFilters(current => { const next = { ...current }; delete next[column.id]; return next })}><span>{column.label}: {activeFilters[column.id]}</span><X size={12} /></button>)}</div>}
+        {(hasSearch || filter === 'matched') && <button className="preview-clear" onClick={clearFilters}><RotateCcw size={12} />Clear filters</button>}
+      </div>}
+    </div>
+}
+
+function PreviewRowStatus({ row, values, hasFilename, onInspect }: PreviewRecord & {
+  hasFilename: boolean
+  onInspect: PreviewTableProps['onInspect']
+}) {
+  return <td className="status-cell">{!hasFilename ? <button className="preview-inspect" data-metadata-opener aria-label={`View metadata for ${row.file.path}`} aria-haspopup="dialog" title={row.error ?? values.status.text} onClick={event => { event.stopPropagation(); onInspect(row.file, event.currentTarget) }}>{row.status === 'error' ? <span className="error-mark">!</span> : <Info size={14} />}</button> : row.status === 'ready' ? <span className="ready-dot" title="Ready to rename" /> : row.status === 'error' ? <span className="error-mark" title={row.error}>!</span> : row.status === 'unchanged' ? <Check size={12} /> : null}</td>
 }

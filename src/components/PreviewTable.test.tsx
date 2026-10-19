@@ -133,6 +133,27 @@ describe('preview table controls', () => {
     expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull()
   })
 
+  it('clears filters when reloading files while preserving sorting, widths, and visible filter inputs', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const resize = screen.getByRole('separator', { name: 'Resize From column' })
+    resize.focus()
+    await user.keyboard('{ArrowRight}')
+    const width = resize.getAttribute('aria-valuenow')
+    await user.click(screen.getByRole('button', { name: 'Sort by Size' }))
+    await user.click(screen.getByRole('button', { name: 'Rename 8 files' }))
+    await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Try the rename' }))
+    await screen.findByRole('button', { name: 'Undo' })
+    await user.click(screen.getByRole('button', { name: 'Column filters' }))
+    await user.type(screen.getByRole('textbox', { name: 'Filter From' }), 'studio-001')
+    expect(fileOrder()).toEqual(['studio-001.jpg'])
+    await user.click(screen.getByRole('button', { name: 'Undo' }))
+    expect(screen.getByRole('textbox', { name: 'Filter From' })).toHaveProperty('value', '')
+    expect(fileOrder()).toHaveLength(12)
+    expect(screen.getByRole('button', { name: 'Sort by Size' }).closest('th')?.getAttribute('aria-sort')).toBe('ascending')
+    expect(screen.getByRole('separator', { name: 'Resize From column' }).getAttribute('aria-valuenow')).toBe(width)
+  })
+
   it('sorts file sizes numerically in both directions without changing rename targets or sequence', async () => {
     const user = userEvent.setup()
     render(<App />)
