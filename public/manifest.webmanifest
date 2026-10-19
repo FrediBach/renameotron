@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "renameotron — A little order for your files.",
+  "short_name": "renameotron",
+  "description": "Rename a whole folder with live regex previews and metadata. Everything stays on your device.",
+  "lang": "en",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f2f2ee",
+  "theme_color": "#f2f2ee",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

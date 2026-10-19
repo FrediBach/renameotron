@@ -18,7 +18,15 @@ npm test       # Rename engine, filesystem safety, and UI interaction tests
 npm run build # TypeScript check + production build in dist/
 ```
 
-This repository is a local POC. It has not been deployed or connected to the renameotron.com domain. The production `dist/` folder can be served by any static host over HTTPS.
+The production `dist/` folder can be served by any static host over HTTPS.
+
+## Deployment
+
+Import this repository into Vercel and connect **renameotron.com** as the production domain. `vercel.json` configures the Vite framework, `npm ci`, `npm run build`, and the `dist/` output directory, plus basic security headers and immutable caching for Vite's hashed assets. The app has only the root route, so no catch-all rewrite is needed; missing assets and unknown URLs retain their 404 responses. Use Node.js 22.12 or newer in the project settings. Configuration reference: [Vercel project configuration](https://vercel.com/docs/project-configuration/vercel-json).
+
+The initial HTML includes canonical, Open Graph, and Twitter card metadata for `https://renameotron.com/`, with a 1200 × 630 PNG social image. `public/` also contains the web app manifest, app icons, Apple touch icon, `robots.txt`, and a single-page sitemap. The manifest supports standalone display; it does not add offline support or a service worker.
+
+To regenerate the social image and icons from the existing robot favicon, run `npm run generate:brand` and commit the generated assets. The editable layout is in `scripts/generate-brand-assets.mjs`; Sharp is used only for asset generation and is not bundled into the app. If the production domain changes, update the URLs in `index.html`, `public/robots.txt`, `public/sitemap.xml`, and the image generator.
 
 ## What works
 
