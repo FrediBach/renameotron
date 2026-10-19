@@ -24,11 +24,11 @@
   margin: 0;
   padding: 13px 14px;
   font-family: var(--mono, 'SFMono-Regular', Consolas, monospace);
-  font-size: 13px;
+  font-size: var(--text-editor);
   font-weight: 400;
   font-variant-ligatures: none;
   letter-spacing: 0;
-  line-height: 22px;
+  line-height: 24px;
   tab-size: 2;
 }
 
@@ -100,20 +100,27 @@
 
 .pattern-input-wrap .autocomplete-option-heading {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
-  font-size: 11px;
+  gap: 4px 10px;
+  font-size: var(--text-body);
+  line-height: 1.4;
 }
 
 .pattern-input-wrap .autocomplete-option-heading code {
+  min-width: 0;
+  max-width: 100%;
   color: #b36a34;
   font-family: var(--mono, 'SFMono-Regular', Consolas, monospace);
-  font-size: 12px;
+  font-size: var(--text-body);
+  overflow-wrap: anywhere;
 }
 
 .pattern-input-wrap .autocomplete-option-heading > span {
+  min-width: 0;
   color: var(--muted, #898c83);
+  overflow-wrap: anywhere;
   text-align: right;
 }
 
@@ -121,8 +128,9 @@
   display: block;
   margin-top: 4px;
   color: var(--muted, #898c83);
-  font-size: 11px;
+  font-size: var(--text-small);
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 @media (forced-colors: active) {
