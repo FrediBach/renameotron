@@ -112,7 +112,8 @@ main { padding: 24px 55px 0; }
 .switch-thumb { display: block; width: 14px; height: 14px; background: white; border-radius: 50%; box-shadow: 0 1px 2px #29302126; transition: transform .15s; }
 .switch[data-state="checked"] { background: #7c8d67; }
 .switch[data-state="checked"] .switch-thumb { transform: translateX(14px); }
-.save-rule { padding: 8px 0; font-size: var(--text-body); }
+.rule-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 16px; }
+.rule-actions .button { gap: 6px; padding: 8px 0; font-size: var(--text-body); }
 .starter-templates { background: #f5f6f0; border-top: 1px solid var(--line); padding: 19px; }
 .starter-heading { font-family: var(--mono); display: flex; justify-content: space-between; align-items: center; font-size: var(--text-caption); letter-spacing: .8px; color: #939b85; margin-bottom: 13px; }
 .starter-card { display: flex; align-items: center; width: 100%; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: 10px 8px; gap: 10px; margin-bottom: 4px; }

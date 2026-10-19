@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCheck, CircleHelp, Folder, FolderOpen, History, Image, Layers3, LoaderCircle, Plus, RotateCcw, SlidersHorizontal, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -9,11 +9,13 @@ import { PreviewTable } from '@/components/PreviewTable'
 import { FileMetadataDialog } from '@/components/FileMetadataDialog'
 import { MetadataPatternBuilder } from '@/components/MetadataPatternBuilder'
 import { TemplateLibrary } from '@/components/TemplateLibrary'
+import { ShareRuleButton } from '@/components/ShareRuleButton'
 import { MODIFIER_DEFINITIONS } from '@/lib/metadata-modifiers'
 import { useRenamePreview } from '@/hooks/useRenamePreview'
 import { captureLabel } from '@/lib/pattern-highlights'
 import { buildRenamePlan, formatBytes, TOKEN_DEFINITIONS, type FileEntry } from '@/lib/rename'
 import { TEMPLATES, type RenameTemplate } from '@/lib/templates'
+import { readSharedSetup } from '@/lib/share'
 import { createDemoFiles } from '@/lib/demo'
 import { applyRenamePlan, pickDirectory, scanDirectory } from '@/lib/filesystem'
 
@@ -32,14 +34,20 @@ function readSavedTemplates(): RenameTemplate[] {
 }
 
 export default function App() {
+  const [initialSetup] = useState(() => {
+    const shared = readSharedSetup(window.location.hash)
+    return shared ? { ...shared, name: 'Custom rule' } : {
+      pattern: DEFAULT_PATTERN, replacement: DEFAULT_REPLACEMENT, flags: 'i', recursive: false, name: 'Photo series',
+    }
+  })
   const [files, setFiles] = useState<FileEntry[]>(createDemoFiles)
   const [directory, setDirectory] = useState<FileSystemDirectoryHandle | null>(null)
   const [selectedIds, setSelectedIds] = useState(() => new Set(createDemoFiles().map(file => file.id)))
-  const [pattern, setPattern] = useState(DEFAULT_PATTERN)
-  const [replacement, setReplacement] = useState(DEFAULT_REPLACEMENT)
-  const [ignoreCase, setIgnoreCase] = useState(true)
-  const [globalMatch, setGlobalMatch] = useState(false)
-  const [recursive, setRecursive] = useState(false)
+  const [pattern, setPattern] = useState(initialSetup.pattern)
+  const [replacement, setReplacement] = useState(initialSetup.replacement)
+  const [ignoreCase, setIgnoreCase] = useState(() => initialSetup.flags.includes('i'))
+  const [globalMatch, setGlobalMatch] = useState(() => initialSetup.flags.includes('g'))
+  const [recursive, setRecursive] = useState(initialSetup.recursive)
   const [busy, setBusy] = useState(false)
   const [progress, setProgress] = useState('')
   const [notice, setNotice] = useState<{ message: string; error?: boolean } | null>(null)
@@ -47,7 +55,7 @@ export default function App() {
   const [search, setSearch] = useState('')
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({})
   const [columnsOpen, setColumnsOpen] = useState(false)
-  const [modal, setModal] = useState<'templates' | 'guide' | 'confirm' | 'history' | 'save' | 'metadata' | 'modifiers' | null>(null)
+  const [modal, setModal] = useState<'templates' | 'guide' | 'confirm' | 'history' | 'save' | 'share' | 'metadata' | 'modifiers' | null>(null)
   const [inspectedFileId, setInspectedFileId] = useState<string | null>(null)
   const metadataOpener = useRef<HTMLButtonElement | null>(null)
   const templateOpener = useRef<HTMLButtonElement | null>(null)
@@ -55,7 +63,7 @@ export default function App() {
   const focusReplacement = useRef(false)
   const [savedTemplates, setSavedTemplates] = useState<RenameTemplate[]>(readSavedTemplates)
   const [templateName, setTemplateName] = useState('')
-  const [activeTemplate, setActiveTemplate] = useState('Photo series')
+  const [activeTemplate, setActiveTemplate] = useState(initialSetup.name)
   const [method, setMethod] = useState<'native' | 'copy'>('native')
   const [history, setHistory] = useState<SavedRun[]>([])
   const [demoUndo, setDemoUndo] = useState<FileEntry[] | null>(null)
@@ -65,6 +73,21 @@ export default function App() {
   const { plan, highlightRegex, captureGroups, inspectedFile, inspectedIndex, totalSize, canRename } = useRenamePreview({
     files, pattern, replacement, flags, selectedIds, inspectedFileId, busy,
   })
+
+  const loadSharedSetup = useEffectEvent(() => {
+    const setup = readSharedSetup(window.location.hash)
+    if (!setup || busy) return
+    setPattern(setup.pattern); setReplacement(setup.replacement)
+    setIgnoreCase(setup.flags.includes('i')); setGlobalMatch(setup.flags.includes('g'))
+    setActiveTemplate('Custom rule'); setModal(null); setNotice(null)
+    if (setup.recursive !== recursive) void rescan(setup.recursive)
+  })
+
+  useEffect(() => {
+    function onHashChange() { loadSharedSetup() }
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  }, [])
 
   useEffect(() => {
     if (!notice || notice.error) return
@@ -200,7 +223,10 @@ export default function App() {
               <div className="subfolder-tip"><Folder size={13} /><p>Use <code>/</code> to put files in a new subfolder.</p></div>
             </div>
             <div className="rule-settings"><SlidersHorizontal size={14} /><label htmlFor="recursive">Include subfolders</label><Switch id="recursive" checked={recursive} disabled={busy} onCheckedChange={value => void rescan(value)} /></div>
-            <Button className="save-rule" variant="ghost" onClick={() => { setTemplateName(activeTemplate === 'Custom rule' ? '' : activeTemplate); setModal('save') }}><Plus size={14} />Save as a template</Button>
+            <div className="rule-actions">
+              <Button variant="ghost" onClick={() => { setTemplateName(activeTemplate === 'Custom rule' ? '' : activeTemplate); setModal('save') }}><Plus size={14} />Save as a template</Button>
+              <ShareRuleButton setup={{ pattern, replacement, flags, recursive }} open={modal === 'share'} onOpenChange={open => setModal(open ? 'share' : null)} onCopied={() => setNotice({ message: 'Share link copied to clipboard.' })} />
+            </div>
           </div>
           <div className="starter-templates"><div className="starter-heading"><span>A GOOD PLACE TO START</span><Sparkles size={13} /></div>
             {[{ name: 'Photo series', description: 'A name. A number. A little order.', icon: Image, pattern: DEFAULT_PATTERN, replacement: DEFAULT_REPLACEMENT, flags: 'i' }, { name: 'Date & name', description: 'Keep the when with the what.', icon: History, pattern: '^.+?(\\.[^.]+)?$', replacement: '{modified|date("YYYY-MM-DD")}_{name|trim|slug|default("file")}$1', flags: '' }, { name: 'Into folders', description: 'Everything in its right place.', icon: Folder, pattern: '^(.+)$', replacement: '{ext|lower|default("no-extension")}/$&', flags: '' }].map(template => <button className={`starter-card ${activeTemplate === template.name ? 'selected' : ''}`} key={template.name} onClick={() => applyTemplate({ ...template, id: template.name, category: 'Everyday' })}><span className="starter-icon"><template.icon size={17} strokeWidth={1.5} /></span><span><strong>{template.name}</strong><small>{template.description}</small></span>{activeTemplate === template.name ? <Check size={14} /> : <ArrowUpRight size={14} />}</button>)}

@@ -38,6 +38,7 @@ To regenerate the social image and icons from the existing robot favicon, run `n
 - Replacement metadata tokens share their background colors with the values they generate in the new-name preview (for example, `{ext}` and `jpg`). Literal text stays plain, even when it equals a metadata value.
 - Keyboard metadata autocomplete and capture groups (`$1`, `$2`, `$&`, named captures); click a colored group chip to insert its reference into the replacement.
 - 90 built-in templates in eight task groups, with examples of all 18 modifiers, plus custom templates saved in this browser. Search combines words across names, descriptions, keywords, metadata, modifier names, and patterns; category filters narrow the results further.
+- **Share** copies a link that restores the find pattern, replacement, regex options, and subfolder setting. If clipboard access is unavailable, the link is shown for manual copying. The setup stays in the URL fragment; files and metadata are not included.
 - Optional recursive scanning, destination subfolder creation, sequences, and stable UUIDs.
 - Basic file metadata and embedded photo EXIF, processed in the browser with `exifr`.
 - Chain metadata modifiers for text cleanup, number and date formatting, MIME subtypes, and missing-value fallbacks; calculated image metadata includes aspect ratios, dimensions, megapixels, and orientation.

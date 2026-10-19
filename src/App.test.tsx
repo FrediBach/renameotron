@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from './App'
 import { MetadataPatternBuilder } from './components/MetadataPatternBuilder'
@@ -9,6 +9,7 @@ import { createDemoFiles } from './lib/demo'
 import * as filesystem from './lib/filesystem'
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '/')
   // Keep browser persistence isolated from Node 25's process-level storage.
   const values = new Map<string, string>()
   const storage: Storage = {
@@ -21,7 +22,7 @@ beforeEach(() => {
   }
   vi.stubGlobal('localStorage', storage)
 })
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); window.history.replaceState(null, '', '/') })
 
 function fileRow(name: string) {
   const row = screen.getByRole('checkbox', { name: `Select ${name}` }).closest('tr')
@@ -59,6 +60,82 @@ async function replaceInput(user: ReturnType<typeof userEvent.setup>, input: HTM
 }
 
 describe('renameotron workspace', () => {
+  it('copies the current setup and restores it when the shared link is opened', async () => {
+    const user = userEvent.setup()
+    const app = render(<App />)
+    const pattern = '^IMG_(\\d+)\\.jpg$'
+    const replacement = 'été + # % & $1.{ext|lower}'
+    await replaceInput(user, screen.getByRole('textbox', { name: 'Find a pattern' }), pattern)
+    await replaceInput(user, replacementInput(), replacement)
+    await user.click(screen.getByRole('checkbox', { name: /Ignore case/ }))
+    await user.click(screen.getByRole('checkbox', { name: /Global/ }))
+    await user.click(screen.getByRole('switch', { name: 'Include subfolders' }))
+    await user.click(screen.getByRole('button', { name: 'Share' }))
+    expect(await screen.findByRole('status')).toHaveProperty('textContent', expect.stringContaining('Share link copied to clipboard.'))
+    const url = new URL(await navigator.clipboard.readText())
+    expect(url.origin).toBe(window.location.origin)
+    expect(url.pathname).toBe(window.location.pathname)
+    expect([...new URLSearchParams(url.hash.slice(1)).keys()].sort()).toEqual(['flags', 'pattern', 'recursive', 'replacement', 'v'])
+
+    app.unmount()
+    window.history.replaceState(null, '', url)
+    render(<App />)
+    expect(screen.getByRole('textbox', { name: 'Find a pattern' })).toHaveProperty('value', pattern)
+    expect(replacementInput().value).toBe(replacement)
+    expect(screen.getByRole('checkbox', { name: /Ignore case/ }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('checkbox', { name: /Global/ }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('switch', { name: 'Include subfolders' }).getAttribute('aria-checked')).toBe('true')
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('été + # % & 1042.jpg')
+    expect(screen.getByRole('button', { name: 'Rename 8 files' })).toHaveProperty('disabled', false)
+    expect(localStorage.getItem('renameotron.templates')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Save as a template' }))
+    expect(screen.getByRole('textbox', { name: 'Template name' })).toHaveProperty('value', '')
+  })
+
+  it.each(['denied', 'unavailable'])('provides a selected link when clipboard access is %s', async access => {
+    const user = userEvent.setup()
+    if (access === 'denied') vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new DOMException('Blocked', 'NotAllowedError'))
+    else vi.spyOn(navigator, 'clipboard', 'get').mockReturnValue(undefined as unknown as Clipboard)
+    render(<App />)
+    const share = screen.getByRole('button', { name: 'Share' })
+    await user.click(share)
+    const dialog = within(await screen.findByRole('dialog', { name: 'Share your naming rule.' }))
+    const input = dialog.getByRole<HTMLInputElement>('textbox', { name: 'Shareable link' })
+    await waitFor(() => expect(document.activeElement).toBe(input))
+    expect(input.readOnly).toBe(true)
+    expect(input.selectionStart).toBe(0)
+    expect(input.selectionEnd).toBe(input.value.length)
+    expect(new URLSearchParams(new URL(input.value).hash.slice(1)).get('replacement')).toBe('studio-{index|pad(3)}.{ext|lower}')
+    expect(screen.queryByRole('status')).toBeNull()
+    await user.click(dialog.getByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(document.activeElement).toBe(share))
+  })
+
+  it('uses the default setup for an incomplete shared link', () => {
+    window.history.replaceState(null, '', '/#v=1&pattern=wrong&flags=i&recursive=1')
+    render(<App />)
+    expect(screen.getByRole('textbox', { name: 'Find a pattern' })).toHaveProperty('value', '^IMG_(\\d+)\\.(jpg|png)$')
+    expect(replacementInput().value).toBe('studio-{index|pad(3)}.{ext|lower}')
+    expect(screen.getByRole('switch', { name: 'Include subfolders' }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('button', { name: 'Rename 8 files' })).toHaveProperty('disabled', false)
+  })
+
+  it('loads a shared link in an already-open tab without resetting file selection', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }))
+    window.history.replaceState(null, '', '/#v=1&pattern=.%2B&replacement=shared-%7Bname%7D.%7Bext%7D&flags=&recursive=1')
+    fireEvent(window, new HashChangeEvent('hashchange'))
+    expect(screen.getByRole('textbox', { name: 'Find a pattern' })).toHaveProperty('value', '.+')
+    expect(replacementInput().value).toBe('shared-{name}.{ext}')
+    expect(screen.getByRole('checkbox', { name: /Ignore case/ }).getAttribute('aria-checked')).toBe('false')
+    expect(screen.getByRole('switch', { name: 'Include subfolders' }).getAttribute('aria-checked')).toBe('true')
+    expect(fileRow('IMG_1042.jpg').getByText('Excluded')).toBeTruthy()
+    expect(targetFilename('IMG_1043.jpg').textContent).toBe('shared-IMG_1043.jpg')
+    expect(screen.getByRole('button', { name: 'Rename 11 files' })).toHaveProperty('disabled', false)
+  })
+
   it('opens metadata from the whole row without changing the rename selection', async () => {
     const user = userEvent.setup()
     render(<App />)
