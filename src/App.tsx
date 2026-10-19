@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCheck, CircleHelp, Folder, FolderOpen, History, Image, Layers3, LoaderCircle, LockKeyhole, Plus, RotateCcw, SlidersHorizontal, Sparkles, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCheck, CircleHelp, Folder, FolderOpen, History, Image, Layers3, LoaderCircle, Plus, RotateCcw, SlidersHorizontal, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
@@ -226,10 +226,14 @@ export default function App() {
         </section>
       </div>
 
-      <div className="workspace-footnote"><span><LockKeyhole size={13} />Your files stay yours. Nothing is uploaded. Ever.</span>{demo ? <span>Try the demo, then make it your own.</span> : <button onClick={resetDemo} disabled={busy}>Back to demo <ArrowRight size={12} /></button>}</div>
+      <footer className="site-footer">
+        <a href="https://fredibach.com">© 2026 by Fredi Bach</a>
+        <div className="footer-details">
+          <span className="footer-version">RENAMEOTRON <span className="footer-slash">/</span> V.01</span>
+          {!demo && <button onClick={resetDemo} disabled={busy}>Back to demo <ArrowRight size={12} /></button>}
+        </div>
+      </footer>
     </main>
-
-    <footer className="site-footer"><span>Less, but better named.</span><span>RENAMEOTRON <span className="footer-slash">/</span> V.01</span></footer>
 
     {notice && <NoticeToast notice={notice} canUndo={!!demoUndo} onDismiss={() => setNotice(null)} onUndo={() => {
       if (!demoUndo) return
