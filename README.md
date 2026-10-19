@@ -26,7 +26,7 @@ This repository is a local POC. It has not been deployed or connected to the ren
 - Regex101-inspired background highlighting for regex syntax, replacement references, and matched filename portions. Capture groups keep the same color across both editors and the preview, using exact regex match indices, including nested and global matches.
 - Replacement metadata tokens share their background colors with the values they generate in the new-name preview (for example, `{ext}` and `jpg`). Literal text stays plain, even when it equals a metadata value.
 - Keyboard metadata autocomplete and capture groups (`$1`, `$2`, `$&`, named captures); click a colored group chip to insert its reference into the replacement.
-- 22 built-in templates, searchable by category, plus custom templates saved in this browser.
+- 90 built-in templates in eight task groups, with examples of all 18 modifiers, plus custom templates saved in this browser. Search combines words across names, descriptions, keywords, metadata, modifier names, and patterns; category filters narrow the results further.
 - Optional recursive scanning, destination subfolder creation, sequences, and stable UUIDs.
 - Basic file metadata and embedded photo EXIF, processed in the browser with `exifr`.
 - Chain metadata modifiers for text cleanup, number and date formatting, MIME subtypes, and missing-value fallbacks; calculated image metadata includes aspect ratios, dimensions, megapixels, and orientation.
@@ -59,7 +59,7 @@ Regexes match the **filename including its extension**, not the full path. A pla
 
 Dates use UTC and support `YYYY`, `MM`, `DD`, `HH`, `mm`, and `ss`. EXIF timestamps often lack timezone information; the parser's interpretation is used. Missing metadata is flagged unless you supply a `default(...)` modifier. Unsupported or damaged image formats may not expose dimensions. Audio tags, PDF document properties, OS creation times, Finder tags, and extended attributes are outside this POC's scope.
 
-For example, match `^IMG_(\d+)\.(jpg|png)$` and replace with `studio-{index:3}.{ext}`. To organize by date, use `{modified:YYYY}/{modified:MM}/{name}.{ext}`.
+For example, match `^IMG_(\d+)\.(jpg|png)$` and replace with `studio-{index|pad(3)}.{ext|lower}`. To organize by date while preserving the original filename (including files without extensions), match `^.+$` and use `{modified|date("YYYY/MM")}/$&`.
 
 ### Metadata modifiers
 
@@ -121,6 +121,8 @@ API references: [Chrome File System Access guide](https://developer.chrome.com/d
 - `src/lib/metadata-modifiers.ts` — modifier catalog, argument parsing, and transformations
 - `src/lib/metadata-pattern.ts` — shared token scanner for modifiers and quoted arguments
 - `src/lib/filesystem.ts` — directory scanning and checked execution
-- `src/lib/templates.ts` — curated template library
+- `src/lib/templates.ts` — curated template library and categories
+- `src/lib/template-search.ts` — search across templates, metadata, and modifiers
+- `src/components/TemplateLibrary.tsx` — grouped, searchable template picker
 
 The `@/` alias and `components.json` are configured for adding further shadcn components.

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCheck, ChevronDown, CircleHelp, Copy, File, FileImage, FileText, Folder, FolderOpen, History, Image, Layers3, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, SlidersHorizontal, Sparkles, WandSparkles, X } from 'lucide-react'
+import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCheck, ChevronDown, CircleHelp, Copy, File, FileImage, FileText, Folder, FolderOpen, History, Image, Layers3, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, SlidersHorizontal, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Switch } from '@/components/ui/switch'
@@ -9,6 +9,7 @@ import { MatchedFilename } from '@/components/MatchedFilename'
 import { HighlightedText } from '@/components/HighlightedText'
 import { FileMetadataDialog } from '@/components/FileMetadataDialog'
 import { MetadataPatternBuilder } from '@/components/MetadataPatternBuilder'
+import { TemplateLibrary } from '@/components/TemplateLibrary'
 import { MODIFIER_DEFINITIONS } from '@/lib/metadata-modifiers'
 import { compileHighlightRegex } from '@/lib/match-highlights'
 import { captureLabel, tokenizeRegex } from '@/lib/pattern-highlights'
@@ -20,13 +21,13 @@ import { applyRenamePlan, pickDirectory, scanDirectory } from '@/lib/filesystem'
 type Receipt = { source: string; destination: string; success: boolean; error?: string }
 type SavedRun = { at: string; demo: boolean; results: Receipt[] }
 const DEFAULT_PATTERN = '^IMG_(\\d+)\\.(jpg|png)$'
-const DEFAULT_REPLACEMENT = 'studio-{index:3}.{ext}'
+const DEFAULT_REPLACEMENT = 'studio-{index|pad(3)}.{ext|lower}'
 
 function readSavedTemplates(): RenameTemplate[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem('renameotron.templates') ?? '[]')
     if (!Array.isArray(parsed)) return []
-    return parsed.filter((item): item is RenameTemplate => item && typeof item === 'object' && ['id', 'name', 'description', 'pattern', 'replacement', 'flags', 'category'].every(key => typeof item[key] === 'string'))
+    return parsed.filter((item): item is RenameTemplate => item && typeof item === 'object' && ['id', 'name', 'description', 'pattern', 'replacement', 'flags', 'category'].every(key => typeof item[key] === 'string')).map(template => ({ ...template, category: 'Saved' }))
   } catch { return [] }
 }
 
@@ -52,10 +53,9 @@ export default function App() {
   const [modal, setModal] = useState<'templates' | 'guide' | 'confirm' | 'history' | 'save' | 'metadata' | 'modifiers' | null>(null)
   const [inspectedFileId, setInspectedFileId] = useState<string | null>(null)
   const metadataOpener = useRef<HTMLButtonElement | null>(null)
+  const templateOpener = useRef<HTMLButtonElement | null>(null)
   const replacementInput = useRef<HTMLInputElement>(null)
   const focusReplacement = useRef(false)
-  const [templateSearch, setTemplateSearch] = useState('')
-  const [templateCategory, setTemplateCategory] = useState('All')
   const [savedTemplates, setSavedTemplates] = useState<RenameTemplate[]>(readSavedTemplates)
   const [templateName, setTemplateName] = useState('')
   const [activeTemplate, setActiveTemplate] = useState('Photo series')
@@ -74,9 +74,6 @@ export default function App() {
   const totalSize = files.reduce((size, file) => size + file.size, 0)
   const allSelected = files.length > 0 && selectedIds.size === files.length
   const canRename = plan.readyCount > 0 && plan.errorCount === 0 && !plan.error && !busy
-  const allTemplates = [...savedTemplates, ...TEMPLATES]
-  const templateCategories = ['All', 'Saved', ...Array.from(new Set(TEMPLATES.map(template => template.category)))]
-  const shownTemplates = allTemplates.filter(template => (templateCategory === 'All' || (templateCategory === 'Saved' ? savedTemplates.some(saved => saved.id === template.id) : template.category === templateCategory)) && `${template.name} ${template.description}`.toLowerCase().includes(templateSearch.toLowerCase()))
 
   useEffect(() => {
     if (!notice || notice.error) return
@@ -186,7 +183,7 @@ export default function App() {
         <a className="brand" href="/" aria-label="renameotron home"><img src="/favicon.svg" width="32" height="32" alt="" /><span>renameotron<span className="brand-period">.</span></span></a>
         <p className="brand-tagline">The nerdy file renaming bot.</p>
       </div>
-      <nav aria-label="Main navigation"><button onClick={() => setModal('templates')}><Layers3 size={15} />Templates</button><button onClick={() => setModal('guide')}><CircleHelp size={15} />How it works</button><span className="header-divider" /><span className="local-label"><span className="status-dot" />100% local</span></nav>
+      <nav aria-label="Main navigation"><button onClick={event => { templateOpener.current = event.currentTarget; setModal('templates') }}><Layers3 size={15} />Templates</button><button onClick={() => setModal('guide')}><CircleHelp size={15} />How it works</button><span className="header-divider" /><span className="local-label"><span className="status-dot" />100% local</span></nav>
     </header>
 
     <main aria-label="Batch rename files">
@@ -218,8 +215,8 @@ export default function App() {
             <Button className="save-rule" variant="ghost" onClick={() => { setTemplateName(activeTemplate === 'Custom rule' ? '' : activeTemplate); setModal('save') }}><Plus size={14} />Save as a template</Button>
           </div>
           <div className="starter-templates"><div className="starter-heading"><span>A GOOD PLACE TO START</span><Sparkles size={13} /></div>
-            {[{ name: 'Photo series', description: 'A name. A number. A little order.', icon: Image, pattern: DEFAULT_PATTERN, replacement: DEFAULT_REPLACEMENT, flags: 'i' }, { name: 'Date & name', description: 'Keep the when with the what.', icon: History, pattern: '^(.+)$', replacement: '{modified:YYYY-MM-DD}_{name}.{ext}', flags: '' }, { name: 'Into folders', description: 'Everything in its right place.', icon: Folder, pattern: '^(.+)$', replacement: '{ext}/{name}.{ext}', flags: '' }].map(template => <button className={`starter-card ${activeTemplate === template.name ? 'selected' : ''}`} key={template.name} onClick={() => applyTemplate({ ...template, id: template.name, category: 'Everyday' })}><span className="starter-icon"><template.icon size={17} strokeWidth={1.5} /></span><span><strong>{template.name}</strong><small>{template.description}</small></span>{activeTemplate === template.name ? <Check size={14} /> : <ArrowUpRight size={14} />}</button>)}
-            <button className="browse-templates" onClick={() => setModal('templates')}>Explore all {TEMPLATES.length} templates<ArrowRight size={14} /></button>
+            {[{ name: 'Photo series', description: 'A name. A number. A little order.', icon: Image, pattern: DEFAULT_PATTERN, replacement: DEFAULT_REPLACEMENT, flags: 'i' }, { name: 'Date & name', description: 'Keep the when with the what.', icon: History, pattern: '^.+?(\\.[^.]+)?$', replacement: '{modified|date("YYYY-MM-DD")}_{name|trim|slug|default("file")}$1', flags: '' }, { name: 'Into folders', description: 'Everything in its right place.', icon: Folder, pattern: '^(.+)$', replacement: '{ext|lower|default("no-extension")}/$&', flags: '' }].map(template => <button className={`starter-card ${activeTemplate === template.name ? 'selected' : ''}`} key={template.name} onClick={() => applyTemplate({ ...template, id: template.name, category: 'Everyday' })}><span className="starter-icon"><template.icon size={17} strokeWidth={1.5} /></span><span><strong>{template.name}</strong><small>{template.description}</small></span>{activeTemplate === template.name ? <Check size={14} /> : <ArrowUpRight size={14} />}</button>)}
+            <button className="browse-templates" onClick={event => { templateOpener.current = event.currentTarget; setModal('templates') }}>Explore all {TEMPLATES.length} templates<ArrowRight size={14} /></button>
           </div>
         </aside>
 
@@ -305,7 +302,11 @@ export default function App() {
       </DialogContent>
     </Dialog>
 
-    <Dialog open={modal === 'templates'} onOpenChange={open => !open && setModal(null)}><DialogContent className="templates-dialog"><p className="eyebrow">SKIP THE BLANK PAGE</p><DialogTitle>A rule for almost everything.</DialogTitle><DialogDescription>Thoughtful starting points. Pick one, then make it yours.</DialogDescription><div className="template-search"><Search size={16} /><input aria-label="Search templates" placeholder="Find a template…" value={templateSearch} onChange={event => setTemplateSearch(event.target.value)} /></div><div className="category-tabs">{templateCategories.map(category => <button className={category === templateCategory ? 'active' : ''} key={category} onClick={() => setTemplateCategory(category)}>{category}</button>)}</div><div className="template-grid">{shownTemplates.map(template => <button key={template.id} onClick={() => applyTemplate(template)}><div><WandSparkles size={19} /><ArrowUpRight size={15} /></div><h3>{template.name}</h3><p>{template.description}</p><code>{template.replacement}</code></button>)}{shownTemplates.length === 0 && <div className="template-empty">{templateCategory === 'Saved' ? 'Your saved naming rules will appear here.' : 'No templates found. Try another search.'}</div>}</div></DialogContent></Dialog>
+    <Dialog open={modal === 'templates'} onOpenChange={open => !open && setModal(null)}>
+      <DialogContent className="templates-dialog" onCloseAutoFocus={event => { event.preventDefault(); templateOpener.current?.focus() }}>
+        <TemplateLibrary savedTemplates={savedTemplates} onApply={applyTemplate} />
+      </DialogContent>
+    </Dialog>
 
     <Dialog open={modal === 'guide'} onOpenChange={open => !open && setModal(null)}><DialogContent className="guide-dialog"><p className="eyebrow">A QUICK FIELD GUIDE</p><DialogTitle>A little logic. A lot of order.</DialogTitle><DialogDescription>Open a folder, write a rule, and check the preview. Only the Rename button changes your files.</DialogDescription><div className="guide-steps"><p><b>01</b><span><strong>Find what matters.</strong> Your regular expression matches the filename, including its extension. Use parentheses to capture a part you want to keep.</span></p><p><b>02</b><span><strong>Make it your own.</strong> Use <code>$1</code> for the first capture, or add metadata with <code>{'{…}'}</code>. Type <code>{'{'}</code> for suggestions.</span></p><p><b>03</b><span><strong>Review, then rename.</strong> Uncheck files to exclude them. Conflicts and missing metadata are flagged before anything changes.</span></p></div><div className="guide-example"><code>^IMG_(\d+)\.jpg$</code><ArrowDown size={15} /><code>photo-$1.{'{ext}'}</code><p>IMG_1042.jpg <ArrowRight size={12} /> photo-1042.jpg</p></div><h3>The useful little details</h3><div className="guide-tokens">{TOKEN_DEFINITIONS.map(token => <div key={token.key}><code>{token.example}</code><span>{token.description}</span></div>)}</div><h3>Make metadata your own</h3><p className="guide-note">Chain modifiers with <code>|</code> in the order they should run: <code>{'{name|trim|lower|whitespace("-")}'}</code>. Text arguments use quotes. The Modifiers builder lets you preview and reorder each step.</p><div className="guide-tokens">{MODIFIER_DEFINITIONS.map(modifier => <div key={modifier.key}><code>{modifier.example}</code><span>{modifier.description}</span></div>)}</div><p className="guide-note">Plain filenames stay in their current folder. Paths with <code>/</code> start at your selected folder. Photo metadata comes from embedded EXIF; modification dates come from the filesystem. Desktop Chrome or Edge is needed for local folder access. Native rename support varies; copy & delete is available as an explicit alternative.</p></DialogContent></Dialog>
 

@@ -212,7 +212,7 @@ describe('renameotron workspace', () => {
     const pattern = patternHighlight(replacementInput())
     const target = targetFilename('IMG_1042.jpg')
     expect(target.textContent).toBe('studio-001.jpg')
-    for (const [token, expression, value] of [['index', '{index:3}', '001'], ['ext', '{ext}', 'jpg']]) {
+    for (const [token, expression, value] of [['index', '{index|pad(3)}', '001'], ['ext', '{ext|lower}', 'jpg']]) {
       const patternToken = pattern.querySelector(`[data-metadata-token="${token}"]`)
       const resultToken = target.querySelector(`[data-metadata-token="${token}"]`)
       expect(patternToken?.textContent).toBe(expression)
@@ -422,11 +422,15 @@ describe('renameotron workspace', () => {
     const user = userEvent.setup()
     const app = render(<App />)
 
-    await user.click(screen.getByRole('button', { name: 'Templates' }))
+    const templateOpener = screen.getByRole('button', { name: 'Templates' })
+    await user.click(templateOpener)
     let dialog = screen.getByRole('dialog', { name: 'A rule for almost everything.' })
-    await user.type(within(dialog).getByRole('textbox', { name: 'Search templates' }), 'Folders by extension')
+    const templateSearch = within(dialog).getByRole('textbox', { name: 'Search templates' })
+    await waitFor(() => expect(document.activeElement).toBe(templateSearch))
+    await user.type(templateSearch, 'Folders by extension')
     await user.click(within(dialog).getByRole('button', { name: /Folders by extension/ }))
-    expect(replacementInput().value).toBe('{ext}/{name}.{ext}')
+    await waitFor(() => expect(document.activeElement).toBe(templateOpener))
+    expect(replacementInput().value).toBe('{ext|lower|default("no-extension")}/$&')
     expect(targetFilename('IMG_1042.jpg').textContent).toBe('jpg/IMG_1042.jpg')
     expect(targetFilename('shoot-notes.md').textContent).toBe('md/shoot-notes.md')
 
@@ -435,7 +439,7 @@ describe('renameotron workspace', () => {
     await replaceInput(user, within(dialog).getByRole('textbox', { name: 'Template name' }), 'My folder rule')
     await user.click(within(dialog).getByRole('button', { name: 'Save template' }))
     expect(JSON.parse(localStorage.getItem('renameotron.templates') ?? '[]')).toEqual([
-      expect.objectContaining({ name: 'My folder rule', replacement: '{ext}/{name}.{ext}', category: 'Saved' }),
+      expect.objectContaining({ name: 'My folder rule', replacement: '{ext|lower|default("no-extension")}/$&', category: 'Saved' }),
     ])
 
     app.unmount()
@@ -444,7 +448,7 @@ describe('renameotron workspace', () => {
     dialog = screen.getByRole('dialog', { name: 'A rule for almost everything.' })
     await user.click(within(dialog).getByRole('button', { name: 'Saved' }))
     await user.click(within(dialog).getByRole('button', { name: /My folder rule/ }))
-    expect(replacementInput().value).toBe('{ext}/{name}.{ext}')
+    expect(replacementInput().value).toBe('{ext|lower|default("no-extension")}/$&')
     expect(screen.getByRole('button', { name: 'Rename 12 files' })).toHaveProperty('disabled', false)
   })
 
