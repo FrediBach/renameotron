@@ -1,0 +1,48 @@
+:root {
+  --regex-match: #d7ecff;
+  --regex-syntax: #bdd3fc;
+  --regex-group-1: #dcf0c8;
+  --regex-group-2: #fbe4c7;
+  --regex-group-3: #e8dcf7;
+  --regex-group-4: #f6d9e2;
+  --regex-group-5: #ccece5;
+  --regex-group-6: #f3eebd;
+  --regex-metadata: #ece5d7;
+}
+
+/* No padding, borders, or font changes: the editor overlay must align exactly. */
+.regex-highlight {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 1px;
+  color: #293329;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  background: transparent;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.hl-match { background: var(--regex-match); }
+.hl-syntax, .hl-escape { background: var(--regex-syntax); }
+.hl-group-1 { background: var(--regex-group-1); }
+.hl-group-2 { background: var(--regex-group-2); }
+.hl-group-3 { background: var(--regex-group-3); }
+.hl-group-4 { background: var(--regex-group-4); }
+.hl-group-5 { background: var(--regex-group-5); }
+.hl-group-6 { background: var(--regex-group-6); }
+.hl-metadata { background: var(--regex-metadata); }
+
+.filename-cell .regex-highlight { border-radius: 0; }
+.filename-cell .regex-highlight:hover { box-shadow: inset 0 -1px #65725370; }
+.capture-key { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 13px; }
+.capture-key > span { font-size: 10px; color: #747d68; margin-right: 2px; }
+.capture-key button { border: 0; border-radius: 3px; padding: 3px 6px; font-family: var(--mono); font-size: 10px; color: #293329; }
+.capture-key button:hover { box-shadow: inset 0 0 0 1px #50603b45; }
+
+@media (forced-colors: active) {
+  .filename-cell .regex-highlight { color: CanvasText; background: Canvas; text-decoration: underline; }
+  .filename-cell .hl-group { text-decoration-style: double; }
+}

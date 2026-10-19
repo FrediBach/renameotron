@@ -1,5 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { TOKEN_DEFINITIONS } from '../lib/rename'
+import type { CaptureGroup } from '@/lib/highlight-types'
+import { tokenizeRegex, tokenizeReplacement } from '@/lib/pattern-highlights'
+import { HighlightedText } from './HighlightedText'
 import './pattern-input.css'
 
 export interface PatternInputProps {
@@ -9,36 +12,15 @@ export interface PatternInputProps {
   kind: 'regex' | 'replacement'
   placeholder?: string
   invalid?: boolean
-}
-
-function highlight(value: string, kind: PatternInputProps['kind']): ReactNode[] {
-  const expression = kind === 'regex'
-    ? /\\(?:[pP]\{[^}]*\}|u\{[\da-fA-F]*\}|.)|\(\?<[^>]+>|\(\?[=:!]|[()[\]{}]|[?+*^$|.]/g
-    : /\$\$|\$[&`']|\$\d{1,2}|\$<[^>]+>|\{[^{}]*\}?/g
-  const parts: ReactNode[] = []
-  let end = 0
-
-  for (const match of value.matchAll(expression)) {
-    const start = match.index
-    if (start > end) parts.push(value.slice(end, start))
-    const token = match[0]
-    const className = kind === 'replacement'
-      ? token.startsWith('$') ? 'syntax-capture' : 'syntax-token'
-      : token.startsWith('\\') ? 'syntax-token'
-        : /^[()[\]{}]/.test(token) ? 'syntax-capture' : 'syntax-special'
-    parts.push(<span className={className} key={start}>{token}</span>)
-    end = start + token.length
-  }
-
-  if (end < value.length) parts.push(value.slice(end))
-  return parts
+  captureGroups?: CaptureGroup[]
 }
 
 function tokenKey(key: string) {
   return key.replace(/^\{/, '').replace(/\}$/, '')
 }
 
-export function PatternInput({ id, value, onChange, kind, placeholder, invalid = false }: PatternInputProps) {
+export function PatternInput({ id, value, onChange, kind, placeholder, invalid = false, captureGroups = [] }: PatternInputProps) {
+  const highlights = useMemo(() => kind === 'regex' ? tokenizeRegex(value).spans : tokenizeReplacement(value, captureGroups), [value, kind, captureGroups])
   const inputRef = useRef<HTMLInputElement>(null)
   const highlightRef = useRef<HTMLPreElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -112,7 +94,7 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
   return (
     <div className={`pattern-input-wrap${invalid ? ' is-invalid' : ''}`}>
       <pre ref={highlightRef} className="pattern-highlight" aria-hidden="true">
-        {value ? highlight(value, kind) : <span className="pattern-placeholder">{placeholder}</span>}
+        {value ? <HighlightedText text={value} spans={highlights} /> : <span className="pattern-placeholder">{placeholder}</span>}
         {'\u200b'}
       </pre>
       <input

@@ -32,6 +32,19 @@ function replacementInput() {
   return screen.getByRole<HTMLInputElement>('combobox', { name: 'Give it a new name' })
 }
 
+function sourceFilename(name: string, path = name) {
+  const row = screen.getByRole('checkbox', { name: `Select ${name}` }).closest('tr')
+  const source = row?.querySelector<HTMLElement>('.filename-cell > span[title]')
+  if (!source || source.title !== path) throw new Error(`No source filename found for ${path}`)
+  return source
+}
+
+function patternHighlight(input: HTMLElement) {
+  const highlight = input.parentElement?.querySelector('.pattern-highlight')
+  if (!highlight) throw new Error('No syntax highlighting found for pattern input')
+  return highlight
+}
+
 async function replaceInput(user: ReturnType<typeof userEvent.setup>, input: HTMLElement, value: string) {
   await user.clear(input)
   await user.paste(value)
@@ -47,6 +60,77 @@ describe('renameotron workspace', () => {
     expect(fileRow('IMG_1049.jpg').getByText('studio-008.jpg')).toBeTruthy()
     expect(fileRow('shoot-notes.md').getByText('No match')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Rename 8 files' })).toHaveProperty('disabled', false)
+  })
+
+  it('uses the same capture groups in the pattern, replacement, and matched filenames', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    const source = sourceFilename('IMG_1042.jpg')
+    expect(source.textContent).toBe('IMG_1042.jpg')
+    expect(Array.from(source.querySelectorAll('.hl-match'), mark => mark.textContent)).toEqual(['IMG_', '.'])
+    expect(source.querySelector('[data-capture-group="1"]')?.textContent).toBe('1042')
+    expect(source.querySelector('[data-capture-group="2"]')?.textContent).toBe('jpg')
+    expect(sourceFilename('shoot-notes.md').querySelector('mark')).toBeNull()
+
+    const expression = patternHighlight(screen.getByRole('textbox', { name: 'Find a pattern' }))
+    expect(expression.getAttribute('aria-hidden')).toBe('true')
+    expect(expression.querySelector('[data-capture-group="1"]')).toBeTruthy()
+    expect(expression.querySelector('[data-capture-group="2"]')).toBeTruthy()
+
+    await replaceInput(user, replacementInput(), '$1-$2-$&-{ext}')
+    const replacement = patternHighlight(replacementInput())
+    expect(replacement.querySelector('[data-capture-group="1"]')?.textContent).toBe('$1')
+    expect(replacement.querySelector('[data-capture-group="2"]')?.textContent).toBe('$2')
+    expect(replacement.querySelector('.hl-match')?.textContent).toBe('$&')
+    expect(replacement.querySelector('.hl-metadata')?.textContent).toBe('{ext}')
+    expect(fileRow('IMG_1042.jpg').getByText('1042-jpg-IMG_1042.jpg-jpg')).toBeTruthy()
+
+    await replaceInput(user, screen.getByRole('textbox', { name: 'Find a pattern' }), '^IMG_\\d+\\.(jpg|png)$')
+    expect(source.querySelector('[data-capture-group="1"]')?.textContent).toBe('jpg')
+    expect(source.querySelector('[data-capture-group="2"]')).toBeNull()
+    expect(replacement.querySelector('[data-capture-group="2"]')).toBeNull()
+  })
+
+  it('updates filename highlights immediately and clears them for exclusions or invalid expressions', async () => {
+    const user = userEvent.setup()
+    const { container } = render(<App />)
+    const pattern = screen.getByRole('textbox', { name: 'Find a pattern' })
+
+    await replaceInput(user, pattern, '^IMG_(1042)\\.jpg$')
+    expect(sourceFilename('IMG_1042.jpg').querySelector('[data-capture-group="1"]')?.textContent).toBe('1042')
+    expect(sourceFilename('IMG_1043.jpg').querySelector('mark')).toBeNull()
+
+    await user.click(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }))
+    expect(sourceFilename('IMG_1042.jpg').querySelector('mark')).toBeNull()
+    await user.click(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }))
+    expect(sourceFilename('IMG_1042.jpg').querySelector('mark')).toBeTruthy()
+
+    await replaceInput(user, pattern, '[')
+    expect(screen.getByRole('alert')).toBeTruthy()
+    expect(container.querySelectorAll('.filename-cell mark')).toHaveLength(0)
+    expect(sourceFilename('IMG_1042.jpg').textContent).toBe('IMG_1042.jpg')
+
+    await replaceInput(user, pattern, '^IMG_(1043)\\.jpg$')
+    expect(sourceFilename('IMG_1042.jpg').querySelector('mark')).toBeNull()
+    expect(sourceFilename('IMG_1043.jpg').querySelector('[data-capture-group="1"]')?.textContent).toBe('1043')
+  })
+
+  it('highlights only the first match unless the global option is enabled', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await replaceInput(user, screen.getByRole('textbox', { name: 'Find a pattern' }), '\\d')
+    const source = sourceFilename('IMG_1042.jpg')
+    const matchedText = () => Array.from(source.querySelectorAll('.hl-match'), mark => mark.textContent).join('')
+    expect(matchedText()).toBe('1')
+
+    await user.click(screen.getByRole('checkbox', { name: /^Global/ }))
+    expect(matchedText()).toBe('1042')
+    expect(source.textContent).toBe('IMG_1042.jpg')
+
+    await user.click(screen.getByRole('checkbox', { name: /^Global/ }))
+    expect(matchedText()).toBe('1')
   })
 
   it('updates capture replacements immediately and blocks collisions or invalid expressions', async () => {
@@ -122,6 +206,10 @@ describe('renameotron workspace', () => {
     expect(fileRow('IMG_1042.jpg').getByText('Excluded')).toBeTruthy()
     expect(screen.getByRole('checkbox', { name: 'Select IMG_1050.jpg' }).getAttribute('aria-checked')).toBe('true')
     expect(fileRow('IMG_1050.jpg').getByText('nested/studio-008.jpg')).toBeTruthy()
+    const nestedSource = sourceFilename('IMG_1050.jpg', 'nested/IMG_1050.jpg')
+    expect(nestedSource.textContent).toBe('nested/IMG_1050.jpg')
+    expect(nestedSource.querySelector('[data-capture-group="1"]')?.textContent).toBe('1050')
+    expect(Array.from(nestedSource.querySelectorAll('mark')).every(mark => !mark.textContent?.includes('nested/'))).toBe(true)
     expect(screen.getByRole('button', { name: 'Rename 8 files' })).toHaveProperty('disabled', false)
   })
 

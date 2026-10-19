@@ -23,7 +23,8 @@ This repository is a local POC. It has not been deployed or connected to the ren
 ## What works
 
 - Live from/to preview, filename search, match filtering, and individual file selection.
-- Regex and replacement syntax highlighting, keyboard metadata autocomplete, and capture groups (`$1`, `$2`, `$&`, named captures).
+- Regex101-inspired background highlighting for regex syntax, replacement references, and matched filename portions. Capture groups keep the same color across both editors and the preview, using exact regex match indices, including nested and global matches.
+- Keyboard metadata autocomplete and capture groups (`$1`, `$2`, `$&`, named captures); click a colored group chip to insert its reference into the replacement.
 - 22 built-in templates, searchable by category, plus custom templates saved in this browser.
 - Optional recursive scanning, destination subfolder creation, sequences, and stable UUIDs.
 - Basic file metadata and embedded photo EXIF, processed in the browser with `exifr`.

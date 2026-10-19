@@ -67,18 +67,6 @@
   color: var(--muted, #898c83);
 }
 
-.pattern-input-wrap .syntax-token {
-  color: #b36a34;
-}
-
-.pattern-input-wrap .syntax-capture {
-  color: #657e62;
-}
-
-.pattern-input-wrap .syntax-special {
-  color: #846d93;
-}
-
 .pattern-input-wrap .autocomplete-menu {
   position: absolute;
   z-index: 50;
