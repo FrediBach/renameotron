@@ -1,0 +1,154 @@
+.pattern-input-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line, #deded8);
+  border-radius: 6px;
+  background: #fbfbf8;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+
+.pattern-input-wrap:focus-within {
+  border-color: var(--ink, #292d27);
+  box-shadow: 0 0 0 2px rgb(44 49 42 / 6%);
+}
+
+.pattern-input-wrap.is-invalid {
+  border-color: #b95343;
+}
+
+.pattern-input-wrap .pattern-highlight,
+.pattern-input-wrap .pattern-text-input {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 13px 14px;
+  font-family: var(--mono, 'SFMono-Regular', Consolas, monospace);
+  font-size: 13px;
+  font-weight: 400;
+  font-variant-ligatures: none;
+  letter-spacing: 0;
+  line-height: 22px;
+  tab-size: 2;
+}
+
+.pattern-input-wrap .pattern-highlight {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--ink, #292d27);
+  white-space: pre;
+  pointer-events: none;
+}
+
+.pattern-input-wrap .pattern-text-input {
+  position: relative;
+  display: block;
+  min-width: 0;
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--ink, #292d27);
+  -webkit-text-fill-color: transparent;
+}
+
+.pattern-input-wrap .pattern-text-input::placeholder {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.pattern-input-wrap .pattern-text-input::selection {
+  background: rgb(199 128 68 / 22%);
+}
+
+.pattern-input-wrap .pattern-placeholder {
+  color: var(--muted, #898c83);
+}
+
+.pattern-input-wrap .syntax-token {
+  color: #b36a34;
+}
+
+.pattern-input-wrap .syntax-capture {
+  color: #657e62;
+}
+
+.pattern-input-wrap .syntax-special {
+  color: #846d93;
+}
+
+.pattern-input-wrap .autocomplete-menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 7px);
+  right: 0;
+  left: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 5px;
+  border: 1px solid var(--line, #deded8);
+  border-radius: 8px;
+  background: var(--paper, #fffefa);
+  box-shadow: 0 10px 32px rgb(30 35 25 / 10%);
+}
+
+.pattern-input-wrap .autocomplete-option {
+  display: block;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink, #292d27);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pattern-input-wrap .autocomplete-option.is-active {
+  background: #f0f1ea;
+}
+
+.pattern-input-wrap .autocomplete-option-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.pattern-input-wrap .autocomplete-option-heading code {
+  color: #b36a34;
+  font-family: var(--mono, 'SFMono-Regular', Consolas, monospace);
+  font-size: 12px;
+}
+
+.pattern-input-wrap .autocomplete-option-heading > span {
+  color: var(--muted, #898c83);
+  text-align: right;
+}
+
+.pattern-input-wrap .autocomplete-option-description {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted, #898c83);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+@media (forced-colors: active) {
+  .pattern-input-wrap .pattern-highlight {
+    display: none;
+  }
+
+  .pattern-input-wrap .pattern-text-input {
+    color: CanvasText;
+    -webkit-text-fill-color: CanvasText;
+  }
+
+  .pattern-input-wrap .pattern-text-input::placeholder {
+    color: GrayText;
+    -webkit-text-fill-color: GrayText;
+  }
+}
