@@ -16,7 +16,10 @@ Open the localhost URL printed by Vite. The app starts with 12 sample files; dem
 ```sh
 npm test       # Rename engine, filesystem safety, and UI interaction tests
 npm run build # TypeScript check + production build in dist/
+npm run doctor -- --verbose # React Doctor: full-project diagnostics
 ```
+
+React Doctor is installed as a development dependency. The `doctor` script disables telemetry and remote scoring while retaining diagnostics. See the [React Doctor CLI reference](https://www.react.doctor/docs/reference/cli-reference) for scan options. The first cleanup reduced findings from 23 to 9 warnings (no errors). Remaining findings cover complexity in four components, effect-driven state resets in the metadata dialog, autocomplete, and preview filters, and a clickable preview row whose metadata action is also available through a keyboard-accessible button. These findings remain visible, without rule suppressions.
 
 The production `dist/` folder can be served by any static host over HTTPS.
 

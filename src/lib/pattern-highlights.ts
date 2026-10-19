@@ -23,6 +23,7 @@ export function tokenizeRegex(pattern: string): { spans: HighlightSpan[]; groups
   for (let cursor = 0; cursor < pattern.length;) {
     const start = cursor
     const character = pattern[cursor]
+    const quantifier = character === '{' ? pattern.slice(cursor).match(/^\{\d+(?:,\d*)?\}\??/)?.[0] : undefined
     if (character === '\\') {
       const escape = pattern.slice(cursor).match(/^\\(?:[pP]\{[^}]*\}?|u\{[\da-fA-F]*\}?|u[\da-fA-F]{4}|x[\da-fA-F]{2}|c[A-Za-z]|k<[^>]*>?|[1-9]\d*|[\s\S])/)?.[0] ?? '\\'
       cursor += escape.length
@@ -51,8 +52,7 @@ export function tokenizeRegex(pattern: string): { spans: HighlightSpan[]; groups
       const group = stack.pop()
       cursor++
       add(start, cursor, group ? 'group' : 'syntax', group ? captureLabel(group) : 'End of group or assertion', group?.index)
-    } else if (character === '{' && /^\{\d+(?:,\d*)?\}/.test(pattern.slice(cursor))) {
-      const quantifier = pattern.slice(cursor).match(/^\{\d+(?:,\d*)?\}\??/)![0]
+    } else if (quantifier) {
       cursor += quantifier.length
       add(start, cursor, 'syntax', 'Quantifier')
     } else if ('*+?'.includes(character)) {
@@ -64,10 +64,11 @@ export function tokenizeRegex(pattern: string): { spans: HighlightSpan[]; groups
     } else cursor++
   }
 
+  const groupsByName = new Map([...groups].reverse().map(group => [group.name, group]))
   for (const { span, reference } of references) {
     const group = /^\d+$/.test(reference)
-      ? groups.find(group => group.index === Number(reference))
-      : groups.find(group => group.name === reference)
+      ? groups[Number(reference) - 1]
+      : groupsByName.get(reference)
     if (group) { span.kind = 'group'; span.group = group.index; span.label = `Backreference to ${captureLabel(group).toLowerCase()}` }
   }
   return { spans, groups }
@@ -85,6 +86,8 @@ export function tokenizeReplacement(replacement: string, groups: CaptureGroup[])
     const expression = replacement.slice(token.start + 1, token.complete ? token.end - 1 : token.end)
     spans.push({ start: token.start, end: token.end, ...(token.key ? metadataHighlight(token.key) : { kind: 'metadata' as const }), label: `Metadata: ${expression}` })
   }
+  const groupsByName = new Map([...groups].reverse().map(group => [group.name, group]))
+  const groupsByIndex = new Map(groups.map(group => [group.index, group]))
   const tokens = /\$\$|\$[&`']|\$\d{1,2}|\$<[^>]*>/g
   let metadataIndex = 0
   for (let match = tokens.exec(replacement); match; match = tokens.exec(replacement)) {
@@ -107,11 +110,11 @@ export function tokenizeReplacement(replacement: string, groups: CaptureGroup[])
     let group: CaptureGroup | undefined
     let length = token.length
     // Unlike regex group declarations, replacement names are literal strings.
-    if (token.startsWith('$<')) group = groups.find(group => group.name === token.slice(2, -1))
+    if (token.startsWith('$<')) group = groupsByName.get(token.slice(2, -1))
     else {
-      group = groups.find(group => group.index === Number(token.slice(1)))
+      group = groupsByIndex.get(Number(token.slice(1)))
       if (!group && token.length === 3) {
-        group = groups.find(group => group.index === Number(token[1]))
+        group = groupsByIndex.get(Number(token[1]))
         length = 2
       }
     }

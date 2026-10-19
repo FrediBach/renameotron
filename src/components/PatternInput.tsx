@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { TOKEN_DEFINITIONS } from '../lib/rename'
 import { MODIFIER_DEFINITIONS } from '@/lib/metadata-modifiers'
 import { scanMetadataTokens } from '@/lib/metadata-pattern'
@@ -22,7 +22,9 @@ function tokenKey(key: string) {
   return key.replace(/^\{/, '').replace(/\}$/, '')
 }
 
-export function PatternInput({ id, value, onChange, kind, placeholder, invalid = false, captureGroups = [], inputRef: externalInputRef }: PatternInputProps) {
+const EMPTY_CAPTURE_GROUPS: CaptureGroup[] = []
+
+export function PatternInput({ id, value, onChange, kind, placeholder, invalid = false, captureGroups = EMPTY_CAPTURE_GROUPS, inputRef: externalInputRef }: PatternInputProps) {
   const highlights = useMemo(() => kind === 'regex' ? tokenizeRegex(value).spans : tokenizeReplacement(value, captureGroups), [value, kind, captureGroups])
   const localInputRef = useRef<HTMLInputElement>(null)
   const inputRef = externalInputRef ?? localInputRef
@@ -49,13 +51,13 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
   const selectedIndex = Math.min(activeIndex, Math.max(0, suggestions.length - 1))
   const menuId = `${id}-suggestions`
 
-  const syncScroll = () => {
+  const syncScroll = useCallback(() => {
     if (highlightRef.current && inputRef.current) {
       highlightRef.current.scrollLeft = inputRef.current.scrollLeft
     }
-  }
+  }, [inputRef])
 
-  useLayoutEffect(syncScroll, [value])
+  useLayoutEffect(syncScroll, [value, syncScroll])
   useEffect(() => setActiveIndex(0), [query])
   useEffect(() => {
     if (!isOpen || !menuRef.current) return

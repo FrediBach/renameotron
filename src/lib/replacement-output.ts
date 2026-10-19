@@ -50,6 +50,7 @@ export function getReplacementOutputHighlights(
     owners.fill(owner, span.start, span.end)
   }
   const { groups } = tokenizeRegex(regex.source)
+  const groupsByName = new Map([...groups].reverse().map(group => [group.name, group]))
   const spans: HighlightSpan[] = []
   let delta = 0
 
@@ -105,7 +106,7 @@ export function getReplacementOutputHighlights(
         const end = text.indexOf('>', cursor + 2)
         if (end !== -1) {
           const name = text.slice(cursor + 2, end)
-          const group = groups.find(candidate => candidate.name === name)
+          const group = groupsByName.get(name)
           appendSubstitution(cursor, end + 1 - cursor, named[name] ?? '', group ? { kind: 'group', group: group.index, label: captureLabel(group) } : undefined)
           cursor = end + 1
           continue
