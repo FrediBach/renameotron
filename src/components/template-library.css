@@ -28,7 +28,12 @@
 .template-card-heading h4 { font-size: var(--text-body); line-height: 1.4; margin: 0; font-weight: 550; color: var(--ink); }
 .template-grid p { font-size: var(--text-small); color: #68745b; line-height: 1.5; margin: 7px 0 12px; flex: 1; }
 .template-grid code { display: block; font-size: var(--text-caption); line-height: 1.6; color: #526b36; overflow-wrap: anywhere; background: #eaf0df; border-radius: 3px; padding: 7px 8px; }
+.template-grid code.template-regex { background: #eee8dc; color: #756044; margin-bottom: 6px; }
 .template-modifiers { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 10px; color: #687a52; font-size: 11px; }
+.template-example { display: grid; gap: 4px; margin-top: 9px; font-size: var(--text-caption); line-height: 1.6; }
+.template-example > div { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 6px; }
+.template-example > div > span { color: #68745b; }
+.template-example samp { white-space: pre-wrap; overflow-wrap: anywhere; color: #526b36; }
 .template-modifiers > svg { margin-right: 2px; }
 .template-modifiers > span { border: 1px solid #dce4d0; border-radius: 3px; padding: 1px 5px; }
 .template-empty { display: flex; flex-direction: column; align-items: center; padding: 35px 12px; color: #7b8d68; text-align: center; }

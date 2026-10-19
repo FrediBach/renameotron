@@ -2,6 +2,7 @@ import { useId, useMemo, useRef, useState } from 'react'
 import { ArrowUpRight, Search, SlidersHorizontal, X } from 'lucide-react'
 import { DialogDescription, DialogTitle } from './ui/dialog'
 import { getTemplateModifiers, matchesTemplateSearch } from '@/lib/template-search'
+import { getTemplateExample } from '@/lib/template-examples'
 import { TEMPLATE_CATEGORIES, TEMPLATES, type RenameTemplate } from '@/lib/templates'
 import './template-library.css'
 
@@ -16,6 +17,7 @@ export function TemplateLibrary({ savedTemplates, onApply }: TemplateLibraryProp
   const results = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState<(typeof TEMPLATE_CATEGORIES)[number]>('All')
+  const examples = useMemo(() => new Map([...savedTemplates, ...TEMPLATES].map(template => [template.id, getTemplateExample(template)])), [savedTemplates])
   const matchingTemplates = useMemo(() => [...savedTemplates.map(template => ({ ...template, category: 'Saved' as const })), ...TEMPLATES]
     .filter(template => matchesTemplateSearch(template, query)), [savedTemplates, query])
   const groups = TEMPLATE_CATEGORIES.filter(value => value !== 'All').map(value => ({
@@ -67,11 +69,17 @@ export function TemplateLibrary({ savedTemplates, onApply }: TemplateLibraryProp
         <div className="template-group-heading"><h3 id={`${id}-${group.category.replaceAll(' ', '-')}`}>{group.category}</h3><span>{group.templates.length} {group.templates.length === 1 ? 'template' : 'templates'}</span></div>
         <div className="template-grid">{group.templates.map((template, index) => {
           const modifiers = getTemplateModifiers(template)
+          const example = examples.get(template.id)!
           const descriptionId = `${id}-${group.category.replaceAll(' ', '-')}-${index}-description`
           return <button type="button" key={template.id} aria-label={template.name} aria-describedby={descriptionId} onClick={() => onApply(template)}>
             <div className="template-card-heading"><h4>{template.name}</h4><ArrowUpRight size={16} aria-hidden="true" /></div>
             <p id={descriptionId}>{template.description}</p>
-            <code title={template.replacement}>{template.replacement || '(remove matched text)'}</code>
+            <code className="template-regex" aria-label="Regex pattern" title="Regex pattern">/{template.pattern}/{template.flags}</code>
+            <code aria-label="Renaming pattern" title={template.replacement}>{template.replacement || '(remove matched text)'}</code>
+            <div className="template-example" aria-label="Example rename">
+              <div><span>From</span><samp>{example.from}</samp></div>
+              <div><span>To →</span><samp>{example.to}</samp></div>
+            </div>
             {modifiers.length > 0 && <div className="template-modifiers" aria-label="Modifiers used">
               <SlidersHorizontal size={12} aria-hidden="true" />
               {modifiers.slice(0, 3).map(modifier => <span key={modifier.key} title={modifier.description}>{modifier.key}</span>)}

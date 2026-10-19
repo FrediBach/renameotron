@@ -27,6 +27,18 @@ function renderLibrary(savedTemplates: RenameTemplate[] = [savedTemplate]) {
 }
 
 describe('template library', () => {
+  it('shows the pattern followed by from and to examples on every card', () => {
+    renderLibrary()
+    expect(screen.getAllByLabelText('Example rename')).toHaveLength(TEMPLATES.length + 1)
+    const card = within(screen.getByRole('button', { name: 'Add a prefix' }))
+    expect(card.getByText('{name|prefix("project-")}$2')).toBeTruthy()
+    expect(card.getByText('Meeting notes.pdf')).toBeTruthy()
+    expect(card.getByText('project-Meeting notes.pdf')).toBeTruthy()
+    const saved = within(screen.getByRole('button', { name: savedTemplate.name }))
+    expect(saved.getByText('archive-old.txt')).toBeTruthy()
+    expect(saved.getByText('delivered-archive-old.txt.txt')).toBeTruthy()
+  })
+
   it('groups templates under accessible category headings and includes saved rules', () => {
     renderLibrary()
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildRenamePlan, type FileEntry } from './rename'
 import { TEMPLATES } from './templates'
+import { getTemplateExample } from './template-examples'
 
 function file(name: string, overrides: Partial<FileEntry> = {}): FileEntry {
   return {
@@ -22,6 +23,12 @@ function preview(id: string, files: FileEntry[], selectedIds?: Set<string>) {
 }
 
 describe('template recipes', () => {
+  it.each(TEMPLATES)('has a working browser example for $name', template => {
+    const example = getTemplateExample(template)
+    expect(example.to).not.toMatch(/^(No rename|Example unavailable)/)
+    expect(example.to).not.toBe(example.from)
+  })
+
   it('retains the existing recipes when extending the catalog', () => {
     expect(TEMPLATES.map(template => template.id)).toEqual(expect.arrayContaining([
       'photo-sequence', 'spaces-to-dashes', 'spaces-to-underscores', 'underscores-to-dashes',
