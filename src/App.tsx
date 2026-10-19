@@ -169,12 +169,7 @@ export default function App() {
       <nav aria-label="Main navigation"><button onClick={() => setModal('templates')}><Layers3 size={15} />Templates</button><button onClick={() => setModal('guide')}><CircleHelp size={15} />How it works</button><span className="header-divider" /><span className="local-label"><span className="status-dot" />100% local</span></nav>
     </header>
 
-    <main>
-      <section className="intro">
-        <div><p className="eyebrow">A LITTLE ORDER FOR YOUR FILES</p><h1>Good names. Better order<span>.</span></h1><p className="intro-description">Turn a folder full of files into a system that makes sense.</p></div>
-        <div className="intro-note"><div className="order-mark" aria-hidden="true"><span /><span /><span /><ArrowRight size={18} /><i /><i /><i /></div><span>Less repetition.<br />More intention.</span></div>
-      </section>
-
+    <main aria-label="Batch rename files">
       <section className="folder-bar" aria-label="Selected folder">
         <div className="folder-symbol"><FolderOpen size={23} strokeWidth={1.5} /></div>
         <div className="folder-details"><div><h2>{demo ? 'Studio selects' : directory.name}</h2>{demo && <span className="demo-badge">DEMO FOLDER</span>}</div><p>{files.length} files <span>·</span> {formatBytes(totalSize)} <span>·</span> {demo ? 'A few sample files to make yourself at home.' : 'Connected to your device'}</p></div>
