@@ -43,7 +43,7 @@ code { font-family: var(--mono); }
 .app-shell { max-width: 1600px; margin: 0 auto; }
 .site-header { height: 85px; padding: 0 55px; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; }
 .brand { display: flex; align-items: center; gap: 11px; font-size: 23px; font-weight: 650; letter-spacing: -1px; }
-.brand img { border-radius: 7px; }
+.brand img { display: block; flex-shrink: 0; image-rendering: pixelated; }
 .brand-period { color: var(--accent); }
 .site-header nav { display: flex; align-items: center; gap: 29px; font-size: var(--text-body); }
 .site-header nav button { display: flex; gap: 8px; align-items: center; border: 0; background: transparent; padding: 8px 0; color: #65695f; }
@@ -305,7 +305,6 @@ main { padding: 24px 55px 0; }
 @media (max-width: 600px) {
   .site-header { padding: 0 20px; height: 73px; }
   .brand { font-size: 21px; }
-  .brand img { width: 29px; height: 29px; }
   .site-header nav { gap: 15px; }
   .site-header nav button { font-size: 0; }
   .site-header nav button svg { width: 17px; height: 17px; }

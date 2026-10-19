@@ -165,7 +165,7 @@ export default function App() {
 
   return <div className="app-shell">
     <header className="site-header">
-      <a className="brand" href="/" aria-label="renameotron home"><img src="/favicon.svg" width="33" height="33" alt="" /><span>renameotron<span className="brand-period">.</span></span></a>
+      <a className="brand" href="/" aria-label="renameotron home"><img src="/favicon.svg" width="32" height="32" alt="" /><span>renameotron<span className="brand-period">.</span></span></a>
       <nav aria-label="Main navigation"><button onClick={() => setModal('templates')}><Layers3 size={15} />Templates</button><button onClick={() => setModal('guide')}><CircleHelp size={15} />How it works</button><span className="header-divider" /><span className="local-label"><span className="status-dot" />100% local</span></nav>
     </header>
 

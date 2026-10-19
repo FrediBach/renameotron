@@ -1,1 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#252721"/><path d="M17 44V20h11M36 20h11v24H36" fill="none" stroke="#f2f2ee" stroke-width="5"/><path d="m34 20-7 24" stroke="#f36b35" stroke-width="5"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" shape-rendering="crispEdges">
+  <g fill="#e96636">
+    <rect x="14" y="2" width="4" height="4" />
+    <rect x="15" y="6" width="2" height="2" />
+    <rect x="8" y="8" width="16" height="16" />
+    <rect x="6" y="10" width="20" height="12" />
+    <rect x="2" y="14" width="4" height="6" />
+    <rect x="26" y="14" width="4" height="6" />
+    <rect x="10" y="24" width="4" height="4" />
+    <rect x="18" y="24" width="4" height="4" />
+  </g>
+  <rect x="8" y="12" width="16" height="8" fill="#292c26" />
+  <g fill="#fbfbf8">
+    <rect x="10" y="14" width="4" height="4" />
+    <rect x="18" y="14" width="4" height="4" />
+  </g>
+</svg>
