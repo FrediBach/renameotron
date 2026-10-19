@@ -632,6 +632,38 @@ describe('renameotron workspace', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Modifiers' })))
   })
 
+  it('builds conditional paths with metadata and capture groups, and restores focus after insertion', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await replaceInput(user, screen.getByRole('textbox', { name: 'Find a pattern' }), '^(.+)\\.([^.]+)$')
+    await replaceInput(user, replacementInput(), 'archive/')
+    await user.click(screen.getByRole('button', { name: 'Condition' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'Choose a path with a condition' }))
+    expect(document.activeElement).toBe(dialog.getByRole('textbox', { name: 'When' }))
+    expect(dialog.getByRole('status').textContent).toBe('archive/photos/landscape/originals/IMG_1042.jpg')
+    await replaceInput(user, dialog.getByRole('combobox', { name: 'Then' }), 'landscape/{camera|slug}/$1.{ext|lower}')
+    await replaceInput(user, dialog.getByRole('combobox', { name: 'Otherwise' }), 'other/$&')
+    expect(dialog.getByRole('status').textContent).toBe('archive/landscape/fujifilm-x100vi/IMG_1042.jpg')
+    await user.click(dialog.getByRole('button', { name: 'Insert condition' }))
+    expect(replacementInput().value).toBe('archive/{if orientation:landscape}landscape/{camera|slug}/$1.{ext|lower}{else}other/$&{end}')
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('archive/landscape/fujifilm-x100vi/IMG_1042.jpg')
+    expect(targetFilename('shoot-notes.md').textContent).toBe('archive/other/shoot-notes.md')
+    await waitFor(() => expect(document.activeElement).toBe(replacementInput()))
+  })
+
+  it('shows condition errors at the replacement input and returns focus when the builder closes', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await replaceInput(user, replacementInput(), '{if orientation:landscape}photos/$&')
+    expect(replacementInput().getAttribute('aria-invalid')).toBe('true')
+    expect(screen.getByRole('textbox', { name: 'Find a pattern' }).getAttribute('aria-invalid')).toBeNull()
+    expect(screen.getByRole('alert')).toBeTruthy()
+    const opener = screen.getByRole('button', { name: 'Condition' })
+    await user.click(opener)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(document.activeElement).toBe(opener))
+  })
+
   it('formats bytes through the builder and allows a fallback for unavailable metadata', async () => {
     const user = userEvent.setup()
     render(<App />)

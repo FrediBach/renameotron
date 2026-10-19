@@ -20,6 +20,6 @@ export function useRenamePreview({ files, pattern, replacement, flags, selectedI
   const inspectedFile = files.find(file => file.id === inspectedFileId)
   const inspectedIndex = plan.rows.filter(row => row.status !== 'unmatched').findIndex(row => row.file.id === inspectedFileId) + 1
   const totalSize = files.reduce((size, file) => size + file.size, 0)
-  const canRename = plan.readyCount > 0 && plan.errorCount === 0 && !plan.error && !busy
+  const canRename = plan.readyCount > 0 && plan.errorCount === 0 && !plan.error && !plan.replacementError && !busy
   return { plan, highlightRegex, captureGroups, inspectedFile, inspectedIndex, totalSize, canRename }
 }

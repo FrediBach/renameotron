@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { getTemplateModifiers, matchesTemplateSearch } from './template-search'
-import type { RenameTemplate } from './templates'
+import { TEMPLATES, type RenameTemplate } from './templates'
 
 const template: RenameTemplate = {
   id: 'resume-series',
@@ -47,6 +47,18 @@ describe('template search', () => {
     expect(matchesTemplateSearch(saved, 'new')).toBe(true)
     expect(matchesTemplateSearch(saved, 'missing')).toBe(false)
     expect(getTemplateModifiers(saved)).toEqual([])
+  })
+
+  it('finds condition recipes by decision, metadata, and fallback terms', () => {
+    const findIds = (query: string) => TEMPLATES.filter(template => matchesTemplateSearch(template, query)).map(template => template.id)
+    expect(findIds('conditional')).toEqual([
+      'organize-landscape-route', 'organize-orientation-routes', 'organize-capture-fallback',
+      'organize-large-images', 'organize-file-kind',
+    ])
+    expect(findIds('condition landscape subfolder')).toContain('organize-landscape-route')
+    expect(findIds('condition capture date missing')).toContain('organize-capture-fallback')
+    expect(findIds('condition size threshold')).toContain('organize-large-images')
+    expect(findIds('elseif mime')).toContain('organize-file-kind')
   })
 })
 

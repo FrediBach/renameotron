@@ -37,11 +37,12 @@ To regenerate the social image and icons from the existing robot favicon, run `n
 - Regex101-inspired background highlighting for regex syntax, replacement references, and matched filename portions. Capture groups keep the same color across both editors and the preview, using exact regex match indices, including nested and global matches.
 - Replacement metadata tokens share their background colors with the values they generate in the new-name preview (for example, `{ext}` and `jpg`). Literal text stays plain, even when it equals a metadata value.
 - Keyboard metadata autocomplete and capture groups (`$1`, `$2`, `$&`, named captures); click a colored group chip to insert its reference into the replacement.
-- 90 built-in templates in eight task groups, with examples of all 18 modifiers, plus custom templates saved in this browser. Search combines words across names, descriptions, keywords, metadata, modifier names, and patterns; category filters narrow the results further.
+- 95 built-in templates in eight task groups, with examples of all 18 modifiers and five conditional folder recipes, plus custom templates saved in this browser. Search combines words across names, descriptions, keywords, metadata, modifier names, and patterns; category filters narrow the results further.
 - **Share** copies a link that restores the find pattern, replacement, regex options, and subfolder setting. If clipboard access is unavailable, the link is shown for manual copying. The setup stays in the URL fragment; files and metadata are not included.
 - Optional recursive scanning, destination subfolder creation, sequences, and stable UUIDs.
 - Basic file metadata and embedded photo EXIF, processed in the browser with `exifr`.
 - Chain metadata modifiers for text cleanup, number and date formatting, MIME subtypes, and missing-value fallbacks; calculated image metadata includes aspect ratios, dimensions, megapixels, and orientation.
+- Choose different replacement text and folders with metadata conditions, including ordered alternatives and missing-metadata fallbacks.
 - Click a file row (or focus its filename and press Enter) to inspect every supported metadata field, its value, and the corresponding naming token. Click an available token to append it to the name pattern. Missing fields are marked; sequence values follow the current selected matches.
 - Explicit review before applying native rename or copy-and-delete, with partial-result reporting and downloadable session receipts.
 - Responsive layout, keyboard navigation, reduced-motion support, accessible Radix dialogs, checkboxes, and switches.
@@ -112,6 +113,34 @@ Dates use UTC and support `YYYY`, `MM`, `DD`, `HH`, `mm`, and `ss`. EXIF timesta
 
 For example, match `^IMG_(\d+)\.(jpg|png)$` and replace with `studio-{index|pad(3)}.{ext|lower}`. To organize by date while preserving the original filename (including files without extensions), match `^.+$` and use `{modified|date("YYYY/MM")}/$&`.
 
+### Metadata conditions
+
+Use `{if condition}…{else}…{end}` to choose replacement text from each file's metadata. With **Find** set to `^.+$`, this puts landscape images in a nested folder and everything else in another folder, preserving each original filename and extension:
+
+```text
+{if orientation:landscape}photos/landscape/originals/{else}photos/other/{end}$&
+```
+
+Use **Condition** beside **Modifiers** to build a condition with **When**, **Then**, and **Otherwise** fields and preview its result. The generated pattern remains editable. In **Templates**, search for `conditional` to find five ready-to-use examples, including orientation, capture date, image size, and file type routes.
+
+Conditions use the field filters from preview search: `type:image`, `width>=3000`, `camera:"Fujifilm"`, `has:taken`, or `metadata.lensModel:"Summilux"`. Combine them with spaces or `AND`, uppercase `OR`, `NOT` (or `-`), and parentheses. Conditions ignore case in values. They read original file metadata, including the source `name` and `path`, plus the stable `uuid` and selected-match `index`. Plain search words and output fields such as `to` and `status` are not supported in conditions.
+
+Add `{elseif condition}` for more routes. The first matching branch wins; `{else}` handles the remainder. For example:
+
+```text
+{if type:image}photos/{elseif type:document}documents/{else}other/{end}$&
+{if type:image size>10MB}assets/large-images/{else}assets/other/{end}$&
+{if has:taken}photos/{taken|date("YYYY/MM")}/{else}photos/undated/{end}$&
+```
+
+Each branch can contain normal text, metadata tokens, modifiers, and capture references. Only the selected branch's values are expanded, so the capture-date example can safely contain `{taken}` without a default in its first branch. Missing metadata makes a direct comparison false, including `!=`; use `has:field` to check availability or `NOT has:field` to select missing values. Negating a comparison can also match missing values.
+
+As in search, `type:image` and `has:type` can infer a type from the extension when browser MIME metadata is missing. The `{type}` output token still uses browser MIME metadata; use `{type|mime|default("unknown")}` when that output needs a fallback. Keep each metadata token entirely inside one branch.
+
+Every block needs `{end}`. The `{else}` branch is optional; without it, a block produces no text when none of its conditions match. Blocks can nest up to 16 levels. Invalid conditions, unclosed blocks, and malformed tokens or modifiers in any branch produce a preview error, including branches that are not selected.
+
+Conditions choose text without changing which files are selected or matched by the find pattern. `{index}` continues across all selected matching files in the batch; each route does not start its own counter. Generated paths follow the same root-relative folder rules, destination checks, and collision checks as other replacements.
+
 ### Metadata modifiers
 
 Append modifiers inside a token with `|`. They run from left to right, so their order matters. The existing date and index formats still work, including when followed by modifiers:
@@ -169,15 +198,20 @@ API references: [Chrome File System Access guide](https://developer.chrome.com/d
 - `src/components/PatternInput.tsx` — highlighted inputs and autocomplete
 - `src/components/ui/` — shadcn conventions with accessible Radix primitives
 - `src/lib/rename.ts` — pure rename planning and validation
+- `src/lib/metadata-values.ts` — shared metadata definitions and value resolution
 - `src/lib/metadata-modifiers.ts` — modifier catalog, argument parsing, and transformations
-- `src/lib/metadata-pattern.ts` — shared token scanner for modifiers and quoted arguments
+- `src/lib/metadata-pattern.ts` — shared scanner for metadata tokens, conditional directives, and quoted arguments
+- `src/lib/conditional-pattern.ts` — conditional block validation and branch selection
+- `src/lib/metadata-condition.ts` — source metadata readers for conditions
+- `src/components/ConditionPatternBuilder.tsx` — condition builder and live example
 - `src/lib/filesystem.ts` — directory scanning and checked execution
 - `src/lib/templates.ts` — curated template library and categories
 - `src/lib/template-search.ts` — search across templates, metadata, and modifiers
 - `src/components/TemplateLibrary.tsx` — grouped, searchable template picker
 - `src/components/PreviewTable.tsx` — column management, resizing, and table controls
 - `src/lib/preview-table.ts` — metadata column values, filtering, and stable sorting
-- `src/lib/file-search.ts` — composable search parsing, typed comparisons, and metadata matching
+- `src/lib/file-query.ts` — shared query parsing and typed comparisons for search and conditions
+- `src/lib/file-search.ts` — preview search fields and metadata matching
 - `src/components/FileSearch.tsx` — search field, syntax guide, and inline validation
 
 The `@/` alias and `components.json` are configured for adding further shadcn components.

@@ -21,14 +21,18 @@ const sampleNames: Record<string, string> = {
   'number-tracks': 'Early_Morning.MP3',
   'document-extension': 'Meeting notes.markdown',
   'document-title': 'meeting_notes.pdf',
+  'organize-landscape-route': 'Mountain view.JPG',
+  'organize-orientation-routes': 'Mountain view.JPG',
+  'organize-capture-fallback': 'Summer Trip.JPG',
+  'organize-large-images': 'Studio original.JPG',
 }
 
-function sampleFile(name: string): FileEntry {
+function sampleFile(name: string, size = 2_400_000): FileEntry {
   return {
     id: `template-example:${name}`,
     name,
     path: name,
-    size: 2_400_000,
+    size,
     type: /\.jpe?g$/i.test(name) ? 'image/jpeg' : /\.pdf$/i.test(name) ? 'application/pdf' : 'text/plain',
     lastModified: Date.UTC(2025, 3, 12, 14, 5, 9),
     metadata: { taken: '2025-04-10T09:30:00Z', camera: 'Fujifilm X100 VI', width: 6240, height: 4160 },
@@ -42,7 +46,8 @@ export function getTemplateExample(template: RenameTemplate) {
   // including literal search text, and never invent a successful rename.
   const names = [...new Set([preferred, ...Object.values(sampleNames), template.pattern, `${template.pattern}.txt`])]
   for (const name of names) {
-    const plan = buildRenamePlan([sampleFile(name)], template.pattern, template.replacement, template.flags)
+    const file = sampleFile(name, template.id === 'organize-large-images' ? 12_400_000 : undefined)
+    const plan = buildRenamePlan([file], template.pattern, template.replacement, template.flags)
     if (plan.error) return { from: preferred, to: 'Example unavailable (invalid rule)' }
     const row = plan.rows[0]
     if (row.status === 'ready') return { from: name, to: row.targetPath }

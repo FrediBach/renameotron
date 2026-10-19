@@ -50,6 +50,15 @@ describe('pattern syntax highlighting', () => {
 describe('replacement syntax highlighting', () => {
   const groups = [{ index: 1, name: 'number' }, { index: 2 }]
 
+  it('highlights conditions separately from branch tokens and ignores captures in query values', () => {
+    const replacement = '{if camera="$1 {name}"}{name}{elseif width>3000}$1{else}$&{end}'
+    expect(tokenizeReplacement(replacement, groups).map(span => [replacement.slice(span.start, span.end), span.kind])).toEqual([
+      ['{if camera="$1 {name}"}', 'syntax'], ['{name}', 'metadata'], ['{elseif width>3000}', 'syntax'],
+      ['$1', 'group'], ['{else}', 'syntax'], ['$&', 'match'], ['{end}', 'syntax'],
+    ])
+    expect(tokenizeReplacement('{if camera="$1 {name}', groups).map(span => span.kind)).toEqual(['syntax'])
+  })
+
   it('uses matching capture colors for numbered and named references', () => {
     const replacement = '$2-$1-$<number>-{index:3}.$&'
     expect(tokenizeReplacement(replacement, groups).map(span => [replacement.slice(span.start, span.end), span.kind, span.group])).toEqual([

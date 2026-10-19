@@ -135,6 +135,80 @@ describe('template recipes', () => {
       .toMatchObject({ status: 'ready', targetPath: '2025/04/Meeting notes.txt' })
   })
 
+  it('routes landscape originals to nested folders and everything else to the fallback', () => {
+    const plan = preview('organize-landscape-route', [
+      file('mountains.jpg', { path: 'trip/mountains.jpg' }),
+      file('portrait.jpg', { metadata: { width: 2000, height: 3000 } }),
+      file('square.jpg', { metadata: { width: 2000, height: 2000 } }),
+      file('unknown.jpg', { metadata: {} }),
+      file('README', { type: 'text/plain', metadata: {} }),
+      file('wide.mp4', { type: 'video/mp4', metadata: { width: 1920, height: 1080 } }),
+    ])
+    expect(plan.errorCount).toBe(0)
+    expect(plan.rows.map(row => row.targetPath)).toEqual([
+      'photos/landscape/originals/mountains.jpg',
+      'photos/other/portrait.jpg',
+      'photos/other/square.jpg',
+      'photos/other/unknown.jpg',
+      'photos/other/README',
+      'photos/other/wide.mp4',
+    ])
+  })
+
+  it('uses elseif orientation routes and a fallback for unavailable dimensions', () => {
+    const plan = preview('organize-orientation-routes', [
+      file('landscape.jpg'),
+      file('portrait.jpg', { metadata: { width: 2000, height: 3000 } }),
+      file('square.jpg', { metadata: { width: 2000, height: 2000 } }),
+      file('unknown.jpg', { metadata: {} }),
+    ])
+    expect(plan.errorCount).toBe(0)
+    expect(plan.rows.map(row => row.targetPath)).toEqual([
+      'photos/landscape/landscape.jpg', 'photos/portrait/portrait.jpg',
+      'photos/square/square.jpg', 'photos/unknown/unknown.jpg',
+    ])
+  })
+
+  it('only formats a capture date when the metadata is available', () => {
+    const plan = preview('organize-capture-fallback', [
+      file('dated.jpg'),
+      file('undated.jpg', { metadata: {} }),
+      file('invalid.jpg', { metadata: { taken: 'invalid' } }),
+    ])
+    expect(plan.errorCount).toBe(0)
+    expect(plan.rows.map(row => row.targetPath)).toEqual([
+      'photos/2025/02/dated.jpg', 'photos/undated/undated.jpg', 'photos/undated/invalid.jpg',
+    ])
+  })
+
+  it('requires both image type and size above the threshold for the large-image route', () => {
+    const plan = preview('organize-large-images', [
+      file('large.jpg', { size: 10_000_001 }),
+      file('at-limit.jpg', { size: 10_000_000 }),
+      file('small.jpg', { size: 1_000_000 }),
+      file('large.pdf', { type: 'application/pdf', size: 20_000_000 }),
+    ])
+    expect(plan.errorCount).toBe(0)
+    expect(plan.rows.map(row => row.targetPath)).toEqual([
+      'assets/large-images/large.jpg', 'assets/other/at-limit.jpg',
+      'assets/other/small.jpg', 'assets/other/large.pdf',
+    ])
+  })
+
+  it('routes mixed file types, including extension fallbacks and unknown files', () => {
+    const plan = preview('organize-file-kind', [
+      file('photo.jpg', { type: '' }),
+      file('report.pdf', { type: 'application/pdf', metadata: {} }),
+      file('notes.txt', { type: '', metadata: {} }),
+      file('package.zip', { type: 'application/zip', metadata: {} }),
+      file('README', { type: '', metadata: {} }),
+    ])
+    expect(plan.errorCount).toBe(0)
+    expect(plan.rows.map(row => row.targetPath)).toEqual([
+      'photos/photo.jpg', 'documents/report.pdf', 'documents/notes.txt', 'other/package.zip', 'other/README',
+    ])
+  })
+
   it('numbers only matching, selected photos using a padded sequence', () => {
     const plan = preview('photo-sequence', [file('IMG_1234.JPG'), file('notes.pdf'), file('IMG_2345.JPG'), file('IMG_3456.JPG')], new Set(['IMG_1234.JPG', 'notes.pdf', 'IMG_3456.JPG']))
     expect(plan.error).toBeUndefined()

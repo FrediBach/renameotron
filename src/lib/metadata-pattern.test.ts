@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { scanMetadataTokens } from './metadata-pattern'
+import { scanMetadataTokens, scanPatternExpressions } from './metadata-pattern'
 
 describe('metadata expression scanner', () => {
+  it('keeps metadata inside quoted conditions opaque and scans branch metadata normally', () => {
+    const input = '{if camera="{else} {name}"}{index:3}{elseif has:taken}{taken}{else}{name}{end}'
+    expect(scanMetadataTokens(input).map(token => token.key)).toEqual(['index', 'taken', 'name'])
+    expect(scanPatternExpressions(input).filter(token => token.kind === 'condition').map(token => input.slice(token.start, token.end))).toEqual([
+      '{if camera="{else} {name}"}', '{elseif has:taken}', '{else}', '{end}',
+    ])
+  })
+
+  it('does not scan directive-like text inside incomplete quoted conditions or modifiers', () => {
+    expect(scanMetadataTokens('{if camera="{name} {else}', true)).toEqual([])
+    const input = '{name|suffix("{if type:image}{else}{end}")}'
+    expect(scanPatternExpressions(input)).toHaveLength(1)
+    expect(scanPatternExpressions(input)[0].kind).toBe('metadata')
+  })
+
   it('keeps legacy formats and ordered modifier expressions with UTF-16 offsets', () => {
     const input = '😀{index:3|suffix("x")}-{modified:YYYY-MM-DD|lower}'
     expect(scanMetadataTokens(input)).toEqual([

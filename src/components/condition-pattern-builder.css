@@ -1,0 +1,17 @@
+.dialog-content.condition-dialog { max-width: 650px; }
+.condition-builder { min-width: 0; }
+.condition-builder-field { margin-bottom: 18px; }
+.condition-builder-field label { display: block; font-size: var(--text-body); font-weight: 500; margin-bottom: 7px; }
+.condition-query { width: 100%; min-width: 0; border: 1px solid #d7ddcc; border-radius: 4px; padding: 12px; background: var(--paper); color: var(--ink); font-family: var(--mono); font-size: var(--text-body); }
+.condition-query:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.condition-builder-field p, .condition-help { margin: 7px 0 0; color: #747d68; font-size: var(--text-small); line-height: 1.6; }
+.condition-preview { margin-top: 18px; padding: 15px; border: 1px solid #dce3cf; background: #f0f4e8; border-radius: 5px; }
+.condition-preview > span { display: block; font-size: var(--text-caption); color: #747d68; overflow-wrap: anywhere; margin-bottom: 6px; }
+.condition-preview > code { display: block; margin-bottom: 16px; }
+.condition-preview code, .condition-preview output { font-family: var(--mono); font-size: var(--text-body); line-height: 1.6; overflow-wrap: anywhere; }
+.condition-preview .field-error { margin-bottom: 0; }
+.condition-builder-actions { display: flex; justify-content: flex-end; margin-top: 17px; }
+.token-chips .condition-open { display: inline-flex; gap: 4px; align-items: center; font-family: var(--font-sans); }
+@media (max-width: 600px) {
+  .condition-dialog.dialog-content { padding: 25px 20px; }
+}

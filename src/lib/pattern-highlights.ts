@@ -1,5 +1,5 @@
 import { metadataHighlight, type CaptureGroup, type HighlightSpan } from './highlight-types'
-import { scanMetadataTokens } from './metadata-pattern'
+import { scanPatternExpressions } from './metadata-pattern'
 
 function decodedGroupName(name: string): string {
   return name.replace(/\\u(?:\{([\da-fA-F]+)\}|([\da-fA-F]{4}))/g, (original, braced: string | undefined, fixed: string | undefined) => {
@@ -81,22 +81,26 @@ export function captureLabel(group: CaptureGroup): string {
 /** Follow JavaScript's two-digit capture fallback ($12 can mean $1 + literal 2). */
 export function tokenizeReplacement(replacement: string, groups: CaptureGroup[]): HighlightSpan[] {
   const spans: HighlightSpan[] = []
-  const metadata = scanMetadataTokens(replacement, true)
-  for (const token of metadata) {
+  const expressions = scanPatternExpressions(replacement, true)
+  for (const token of expressions) {
+    if (token.kind === 'condition') {
+      spans.push({ start: token.start, end: token.end, kind: 'syntax', label: `Condition: ${token.directive}${token.query.trim() ? ` ${token.query.trim()}` : ''}` })
+      continue
+    }
     const expression = replacement.slice(token.start + 1, token.complete ? token.end - 1 : token.end)
     spans.push({ start: token.start, end: token.end, ...(token.key ? metadataHighlight(token.key) : { kind: 'metadata' as const }), label: `Metadata: ${expression}` })
   }
   const groupsByName = new Map([...groups].reverse().map(group => [group.name, group]))
   const groupsByIndex = new Map(groups.map(group => [group.index, group]))
   const tokens = /\$\$|\$[&`']|\$\d{1,2}|\$<[^>]*>/g
-  let metadataIndex = 0
+  let expressionIndex = 0
   for (let match = tokens.exec(replacement); match; match = tokens.exec(replacement)) {
     const token = match[0]
     const start = match.index
-    while (metadata[metadataIndex]?.end <= start) metadataIndex++
-    // Replacement syntax in a modifier argument belongs to the metadata token.
-    if (metadata[metadataIndex] && start + token.length > metadata[metadataIndex].start) {
-      tokens.lastIndex = metadata[metadataIndex].end
+    while (expressions[expressionIndex]?.end <= start) expressionIndex++
+    // Captures inside modifier arguments or condition values are literal text.
+    if (expressions[expressionIndex] && start + token.length > expressions[expressionIndex].start) {
+      tokens.lastIndex = expressions[expressionIndex].end
       continue
     }
     if (token === '$&') {

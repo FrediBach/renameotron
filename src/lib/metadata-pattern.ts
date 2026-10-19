@@ -9,18 +9,58 @@ export interface MetadataPatternToken {
   error?: string
 }
 
+export interface ConditionPatternToken {
+  kind: 'condition'
+  start: number
+  end: number
+  directive: 'if' | 'elseif' | 'else' | 'end'
+  query: string
+  complete: boolean
+}
+
+export type PatternExpression = (MetadataPatternToken & { kind: 'metadata' }) | ConditionPatternToken
+
 /**
  * Find metadata expressions without interpreting their values or arguments.
  * Quoted modifier arguments may contain delimiters, braces, and escaped quotes.
  * Tolerant scanning also returns unfinished expressions for editor assistance.
  */
 export function scanMetadataTokens(text: string, tolerant = false): MetadataPatternToken[] {
-  const tokens: MetadataPatternToken[] = []
+  return scanPatternExpressions(text, tolerant).flatMap(expression => {
+    if (expression.kind !== 'metadata') return []
+    const { kind: _kind, ...token } = expression
+    return [token]
+  })
+}
+
+/** Scan directives and metadata together, keeping quoted text opaque to both. */
+export function scanPatternExpressions(text: string, tolerant = false): PatternExpression[] {
+  const tokens: PatternExpression[] = []
   for (let start = 0; start < text.length; start++) {
     if (text[start] !== '{') continue
+    const directive = text.slice(start + 1).match(/^(if|elseif|else|end)(?=\s|}|$)/)?.[1] as ConditionPatternToken['directive'] | undefined
+    if (directive) {
+      let cursor = start + directive.length + 1
+      const queryStart = cursor
+      let quote: string | undefined
+      for (; cursor < text.length; cursor++) {
+        const character = text[cursor]
+        if (character === '\\') { cursor++; continue }
+        if (quote) {
+          if (character === quote) quote = undefined
+        } else if (character === '"' || character === "'") quote = character
+        else if (character === '}') break
+      }
+      cursor = Math.min(cursor, text.length)
+      const complete = text[cursor] === '}'
+      const end = complete ? cursor + 1 : cursor
+      if (complete || tolerant) tokens.push({ kind: 'condition', start, end, directive, query: text.slice(queryStart, cursor), complete })
+      start = end - 1
+      continue
+    }
     const key = text.slice(start + 1).match(/^[a-zA-Z][\w-]*/)?.[0]
     if (!key) {
-      if (tolerant && start === text.length - 1) tokens.push({ start, end: text.length, key: '', modifiers: [], complete: false })
+      if (tolerant && start === text.length - 1) tokens.push({ kind: 'metadata', start, end: text.length, key: '', modifiers: [], complete: false })
       continue
     }
 
@@ -80,7 +120,7 @@ export function scanMetadataTokens(text: string, tolerant = false): MetadataPatt
     if (!complete && hasModifiers) error ??= 'Close the metadata modifier expression with }.'
     const end = complete ? cursor + 1 : cursor
     if (complete || tolerant) {
-      tokens.push({ start, end, key, ...(format === undefined ? {} : { format }), modifiers, complete, ...(error ? { error } : {}) })
+      tokens.push({ kind: 'metadata', start, end, key, ...(format === undefined ? {} : { format }), modifiers, complete, ...(error ? { error } : {}) })
     }
     // Never scan quoted arguments again, even if an expression is unfinished.
     start = end - 1
