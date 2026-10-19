@@ -116,23 +116,25 @@ export function PreviewTable({ files, plan, selectedIds, onToggleFile, onSelectF
 
   return <>
     <div className="preview-toolbar preview-table-toolbar">
-      <div className="preview-toolbar-top">
-        <div className="view-tabs" aria-label="Filter files">
+      <div className="preview-controls">
+        <div className="view-tabs" role="group" aria-label="Filter files">
           <button className={filter === 'all' ? 'active' : ''} aria-pressed={filter === 'all'} onClick={() => onFilterChange('all')}>All files<span>{files.length}</span></button>
           <button className={filter === 'matched' ? 'active' : ''} aria-pressed={filter === 'matched'} onClick={() => onFilterChange('matched')}>Matched<span>{plan.matchedCount}</span></button>
         </div>
+        <div className="preview-search-row">
+          <div className="file-search"><Search size={14} /><input aria-label="Search files" placeholder="Search names & metadata…" value={search} onChange={event => onSearchChange(event.target.value)} />{search && <button onClick={() => onSearchChange('')} aria-label="Clear search" title="Clear search"><X size={13} /></button>}</div>
+          <span className="preview-result-count" aria-live="polite" aria-atomic="true">{hasSearch || filter === 'matched' ? `${visible.length} of ${files.length}` : `${files.length} files`}</span>
+        </div>
         <div className="preview-view-actions">
           <button className="preview-tool-button" aria-label="Column filters" aria-pressed={showFilters} title="Search within individual columns" onClick={() => setShowFilters(current => !current)}><ListFilter size={14} /><span>Filters</span>{filterCount > 0 && <b>{filterCount}</b>}</button>
-          <button ref={columnsButton} className="preview-tool-button" aria-haspopup="dialog" onClick={() => openColumns(true)}><Columns3 size={14} />Columns</button>
+          <button ref={columnsButton} className="preview-tool-button" aria-label="Columns" title="Manage columns" aria-haspopup="dialog" onClick={() => openColumns(true)}><Columns3 size={14} /><span>Columns</span></button>
         </div>
       </div>
-      <div className="preview-search-row">
-        <div className="file-search"><Search size={14} /><input aria-label="Search files" placeholder="Search names and all metadata…" value={search} onChange={event => onSearchChange(event.target.value)} />{search && <button onClick={() => onSearchChange('')} aria-label="Clear search"><X size={13} /></button>}</div>
-        <span className="preview-result-count" aria-live="polite" aria-atomic="true">{visible.length} of {files.length} files</span>
-        {(hasSearch || filter === 'matched') && <button className="preview-clear" onClick={clearFilters}>Clear filters</button>}
-      </div>
-      {showFilters && <p className="column-filter-hint">Filter each column below. Files must match every filter.</p>}
-      {!showFilters && filterCount > 0 && <div className="active-column-filters">{columns.filter(column => activeFilters[column.id]).map(column => <button key={column.id} title={`Clear ${column.label} filter`} aria-label={`Clear ${column.label} filter`} onClick={() => setFilters(current => { const next = { ...current }; delete next[column.id]; return next })}><span>{column.label}: {activeFilters[column.id]}</span><X size={12} /></button>)}</div>}
+      {(showFilters || hasSearch || filter === 'matched') && <div className="preview-filter-summary">
+        {showFilters && <p className="column-filter-hint">Filter columns below. Files must match every filter.</p>}
+        {!showFilters && filterCount > 0 && <div className="active-column-filters">{columns.filter(column => activeFilters[column.id]).map(column => <button key={column.id} title={`Clear ${column.label} filter`} aria-label={`Clear ${column.label} filter`} onClick={() => setFilters(current => { const next = { ...current }; delete next[column.id]; return next })}><span>{column.label}: {activeFilters[column.id]}</span><X size={12} /></button>)}</div>}
+        {(hasSearch || filter === 'matched') && <button className="preview-clear" onClick={clearFilters}><RotateCcw size={12} />Clear filters</button>}
+      </div>}
     </div>
     <div className="file-table-scroll" role="region" aria-label="File rename preview" tabIndex={0}>
       <table className="file-table preview-table" style={{ minWidth: columns.reduce((total, column) => total + columnWidth(column), 80) }}>

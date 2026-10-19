@@ -1,19 +1,30 @@
-.preview-panel .preview-table-toolbar { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: 10px; }
-.preview-toolbar-top, .preview-search-row, .preview-view-actions { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.preview-toolbar-top { justify-content: space-between; flex-wrap: wrap; }
-.preview-view-actions { gap: 5px; }
-.preview-tool-button { display: inline-flex; align-items: center; gap: 6px; padding: 7px 8px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #69765a; font-size: var(--text-small); white-space: nowrap; }
+.preview-panel { container: preview / inline-size; }
+.preview-panel .preview-heading { height: 42px; padding-inline: 14px; gap: 12px; }
+.preview-heading .activity-button { min-height: 32px; }
+.preview-panel .preview-table-toolbar { display: flex; flex-direction: column; flex-wrap: nowrap; align-items: stretch; justify-content: flex-start; gap: 6px; padding: 0 14px 10px; }
+.preview-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; }
+.preview-controls .view-tabs { padding: 2px; }
+.preview-controls .view-tabs button { min-height: 28px; gap: 7px; padding: 2px 8px; font-size: var(--text-small); white-space: nowrap; }
+.preview-search-row, .preview-view-actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.preview-view-actions { gap: 2px; }
+.preview-tool-button { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; gap: 6px; padding: 5px 7px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: #69765a; font-size: var(--text-small); white-space: nowrap; }
 .preview-tool-button:hover, .preview-tool-button[aria-pressed="true"] { background: #edf1e5; border-color: #dce3d0; }
 .preview-tool-button b { font-size: 11px; border-radius: 3px; padding: 1px 4px; background: #dce6cf; font-weight: 500; }
-.preview-search-row { flex-wrap: wrap; }
-.preview-search-row .file-search { flex: 1 1 200px; padding: 0 9px; min-width: 140px; border: 1px solid #e0e5d7; background: #f6f8f1; border-radius: 4px; }
-.preview-search-row .file-search:focus-within, .column-filter:focus-within, .column-catalog-search:focus-within { border-color: #91a679; box-shadow: 0 0 0 1px #91a679; }
-.preview-search-row .file-search input { width: 100%; min-width: 0; padding: 7px 0; font-size: var(--text-small); }
+.preview-search-row { min-height: 34px; padding: 0 9px; border: 1px solid #e0e5d7; background: #f6f8f1; border-radius: 4px; }
+.preview-search-row .file-search { flex: 1; min-width: 0; }
+.preview-search-row .file-search > svg { flex-shrink: 0; }
+.preview-search-row:focus-within, .column-filter:focus-within, .column-catalog-search:focus-within { border-color: #91a679; box-shadow: 0 0 0 1px #91a679; }
+.preview-search-row .file-search input { width: 100%; min-width: 0; padding: 6px 0; font-size: var(--text-small); text-overflow: ellipsis; }
+.preview-search-row .file-search button { align-items: center; justify-content: center; flex-shrink: 0; width: 24px; height: 28px; padding: 0; border-radius: 3px; }
+.preview-search-row .file-search button:hover { background: #e7eddd; }
 .preview-result-count { font-family: var(--mono); font-size: var(--text-caption); color: #747d68; white-space: nowrap; }
+.preview-search-row .preview-result-count { padding-left: 8px; border-left: 1px solid #e0e5d7; }
 .preview-clear { display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; border: 0; background: none; color: #647650; font-size: var(--text-caption); white-space: nowrap; }
 .preview-clear:hover { text-decoration: underline; }
+.preview-filter-summary { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; min-width: 0; }
+.preview-filter-summary > .preview-clear { margin-left: auto; min-height: 28px; }
 .column-filter-hint { color: #747d68; font-size: var(--text-caption); margin: 0; line-height: 1.4; }
-.active-column-filters { display: flex; flex-wrap: wrap; gap: 5px; }
+.active-column-filters { display: flex; flex-wrap: wrap; gap: 5px; min-width: 0; max-width: 100%; }
 .active-column-filters button { display: flex; align-items: center; gap: 6px; max-width: 100%; padding: 3px 6px; border: 1px solid #dae3cc; border-radius: 3px; background: #edf2e5; color: #667654; font-size: var(--text-caption); }
 .active-column-filters button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-panel .preview-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
@@ -63,12 +74,23 @@
 .column-catalog p { grid-column: 1/-1; color: #7c8970; font-size: var(--text-body); }
 .columns-dialog-note { margin: 20px 0 0; color: #747d68; font-size: var(--text-caption); line-height: 1.6; }
 .columns-dialog-actions { display: flex; justify-content: flex-end; margin-top: 20px; }
-@media (max-width: 850px) {
-  .preview-toolbar-top { gap: 7px; }
-  .preview-table-toolbar .preview-view-actions { margin-left: auto; }
-  .preview-table-toolbar .preview-tool-button { padding-inline: 6px; }
+/* Respond to the pane, which can be narrow even in a desktop workspace. */
+@container preview (max-width: 720px) {
+  .preview-controls { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 8px; }
+  .preview-controls .view-tabs { justify-self: start; }
+  .preview-search-row { grid-column: 1 / -1; grid-row: 2; }
+  .preview-view-actions { grid-column: 2; grid-row: 1; }
+}
+@container preview (max-width: 390px) {
+  .preview-panel .preview-heading { padding-inline: 10px; }
+  .preview-panel .preview-table-toolbar { padding-inline: 10px; }
+  .preview-tool-button { min-width: 34px; padding-inline: 7px; }
+  .preview-tool-button > span { display: none; }
+}
+@media (pointer: coarse) {
+  .preview-controls .view-tabs button, .preview-tool-button, .preview-search-row, .preview-heading .activity-button { min-height: 40px; }
+  .preview-search-row .file-search button { width: 32px; height: 36px; }
 }
 @media (max-width: 420px) {
   .column-catalog { gap: 14px 10px; }
-  .preview-search-row { gap: 7px; }
 }
