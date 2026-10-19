@@ -14,7 +14,7 @@ function Editor({ initialValue = '' }: { initialValue?: string }) {
 }
 
 async function focusAt(user: ReturnType<typeof userEvent.setup>, cursor: number) {
-  const input = screen.getByRole<HTMLInputElement>('combobox')
+  const input = screen.getByRole<HTMLTextAreaElement>('combobox')
   await user.click(input)
   input.setSelectionRange(cursor, cursor)
   fireEvent.select(input)

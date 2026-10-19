@@ -31,7 +31,7 @@ function fileRow(name: string) {
 }
 
 function replacementInput() {
-  return screen.getByRole<HTMLInputElement>('combobox', { name: 'Give it a new name' })
+  return screen.getByRole<HTMLTextAreaElement>('combobox', { name: 'Give it a new name' })
 }
 
 function sourceFilename(name: string, path = name) {

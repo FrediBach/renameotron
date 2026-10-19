@@ -1,5 +1,7 @@
 .pattern-input-wrap {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   width: 100%;
   min-width: 0;
   border: 1px solid var(--line, #deded8);
@@ -20,7 +22,9 @@
 .pattern-input-wrap .pattern-highlight,
 .pattern-input-wrap .pattern-text-input {
   box-sizing: border-box;
+  grid-area: 1 / 1;
   width: 100%;
+  min-width: 0;
   margin: 0;
   padding: 13px 14px;
   font-family: var(--mono, 'SFMono-Regular', Consolas, monospace);
@@ -30,21 +34,23 @@
   letter-spacing: 0;
   line-height: 24px;
   tab-size: 2;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .pattern-input-wrap .pattern-highlight {
-  position: absolute;
-  inset: 0;
+  /* The mirror sets the shared grid row height, including when the width changes. */
   overflow: hidden;
   color: var(--ink, #292d27);
-  white-space: pre;
   pointer-events: none;
 }
 
 .pattern-input-wrap .pattern-text-input {
   position: relative;
   display: block;
-  min-width: 0;
+  align-self: stretch;
+  resize: none;
+  overflow: hidden;
   border: 0;
   border-radius: inherit;
   outline: none;
@@ -135,7 +141,7 @@
 
 @media (forced-colors: active) {
   .pattern-input-wrap .pattern-highlight {
-    display: none;
+    visibility: hidden;
   }
 
   .pattern-input-wrap .pattern-text-input {

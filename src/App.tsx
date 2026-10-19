@@ -60,7 +60,7 @@ export default function App() {
   const [inspectedFileId, setInspectedFileId] = useState<string | null>(null)
   const metadataOpener = useRef<HTMLButtonElement | null>(null)
   const templateOpener = useRef<HTMLButtonElement | null>(null)
-  const replacementInput = useRef<HTMLInputElement>(null)
+  const replacementInput = useRef<HTMLTextAreaElement>(null)
   const focusReplacement = useRef(false)
   const [savedTemplates, setSavedTemplates] = useState<RenameTemplate[]>(readSavedTemplates)
   const [templateName, setTemplateName] = useState('')

@@ -15,7 +15,7 @@ export interface PatternInputProps {
   placeholder?: string
   invalid?: boolean
   captureGroups?: CaptureGroup[]
-  inputRef?: RefObject<HTMLInputElement | null>
+  inputRef?: RefObject<HTMLTextAreaElement | null>
 }
 
 function tokenKey(key: string) {
@@ -26,7 +26,7 @@ const EMPTY_CAPTURE_GROUPS: CaptureGroup[] = []
 
 export function PatternInput({ id, value, onChange, kind, placeholder, invalid = false, captureGroups = EMPTY_CAPTURE_GROUPS, inputRef: externalInputRef }: PatternInputProps) {
   const highlights = useMemo(() => kind === 'regex' ? tokenizeRegex(value).spans : tokenizeReplacement(value, captureGroups), [value, kind, captureGroups])
-  const localInputRef = useRef<HTMLInputElement>(null)
+  const localInputRef = useRef<HTMLTextAreaElement>(null)
   const inputRef = externalInputRef ?? localInputRef
   const highlightRef = useRef<HTMLPreElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -45,6 +45,7 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
   const syncScroll = useCallback(() => {
     if (highlightRef.current && inputRef.current) {
       highlightRef.current.scrollLeft = inputRef.current.scrollLeft
+      highlightRef.current.scrollTop = inputRef.current.scrollTop
     }
   }, [inputRef])
 
@@ -76,15 +77,19 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
     })
   }
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing) return
+    // Wrapping is visual: Enter still accepts a suggestion without adding a newline.
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      if (isOpen) insertToken(suggestions[selectedIndex].example)
+      return
+    }
     if (!isOpen) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       const delta = event.key === 'ArrowDown' ? 1 : -1
       setActiveIndex((selectedIndex + delta + suggestions.length) % suggestions.length)
-    } else if (event.key === 'Enter') {
-      event.preventDefault()
-      insertToken(suggestions[selectedIndex].example)
     } else if (event.key === 'Escape') {
       event.preventDefault()
       event.stopPropagation()
@@ -104,11 +109,12 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
         {value ? <HighlightedText text={value} spans={highlights} /> : <span className="pattern-placeholder">{placeholder}</span>}
         {'\u200b'}
       </pre>
-      <input
+      <textarea
         ref={inputRef}
         id={id}
         className="pattern-text-input"
-        type="text"
+        rows={1}
+        wrap="soft"
         value={value}
         placeholder={placeholder}
         spellCheck={false}
@@ -120,10 +126,15 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
         aria-controls={isOpen ? menuId : undefined}
         aria-activedescendant={isOpen ? `${menuId}-${selectedIndex}` : undefined}
         onChange={(event) => {
+          const raw = event.currentTarget.value
+          const next = raw.replace(/[\r\n]/g, '')
+          const nextCursor = raw.slice(0, event.currentTarget.selectionStart).replace(/[\r\n]/g, '').length
           setNavigation(null)
-          setCursor(event.currentTarget.selectionStart ?? event.currentTarget.value.length)
+          setCursor(nextCursor)
           setDismissed(false)
-          onChange(event.currentTarget.value)
+          onChange(next)
+          // Preserve text-input paste behavior and the caret after removing line breaks.
+          if (next !== raw) requestAnimationFrame(() => inputRef.current?.setSelectionRange(nextCursor, nextCursor))
         }}
         onFocus={(event) => {
           setNavigation(null)
