@@ -24,6 +24,7 @@ This repository is a local POC. It has not been deployed or connected to the ren
 
 - Live from/to preview, filename search, match filtering, and individual file selection.
 - Regex101-inspired background highlighting for regex syntax, replacement references, and matched filename portions. Capture groups keep the same color across both editors and the preview, using exact regex match indices, including nested and global matches.
+- Replacement metadata tokens share their background colors with the values they generate in the new-name preview (for example, `{ext}` and `jpg`). Literal text stays plain, even when it equals a metadata value.
 - Keyboard metadata autocomplete and capture groups (`$1`, `$2`, `$&`, named captures); click a colored group chip to insert its reference into the replacement.
 - 22 built-in templates, searchable by category, plus custom templates saved in this browser.
 - Optional recursive scanning, destination subfolder creation, sequences, and stable UUIDs.

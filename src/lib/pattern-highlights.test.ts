@@ -73,6 +73,6 @@ describe('replacement syntax highlighting', () => {
 
   it('keeps incomplete metadata highlighted while typing', () => {
     const replacement = 'photo-{mod'
-    expect(tokenizeReplacement(replacement, groups)).toEqual([{ start: 6, end: 10, kind: 'metadata', label: 'Metadata: mod' }])
+    expect(tokenizeReplacement(replacement, groups)).toEqual([{ start: 6, end: 10, kind: 'metadata', token: 'mod', label: 'Metadata: mod' }])
   })
 })

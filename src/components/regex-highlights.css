@@ -33,16 +33,30 @@
 .hl-group-4 { background: var(--regex-group-4); }
 .hl-group-5 { background: var(--regex-group-5); }
 .hl-group-6 { background: var(--regex-group-6); }
-.hl-metadata { background: var(--regex-metadata); }
+.hl-metadata { background: var(--token-background, var(--regex-metadata)); }
+.hl-token-name { --token-background: var(--regex-match); }
+.hl-token-ext { --token-background: var(--regex-group-2); }
+.hl-token-index { --token-background: var(--regex-group-1); }
+.hl-token-uuid, .hl-token-type { --token-background: var(--regex-group-4); }
+.hl-token-modified, .hl-token-taken { --token-background: var(--regex-group-3); }
+.hl-token-camera, .hl-token-size { --token-background: var(--regex-group-5); }
+.hl-token-width, .hl-token-height { --token-background: var(--regex-group-6); }
 
-.filename-cell .regex-highlight { border-radius: 0; }
-.filename-cell .regex-highlight:hover { box-shadow: inset 0 -1px #65725370; }
+.token-chips button.metadata-token-chip {
+  color: #293329;
+  background: var(--token-background, var(--regex-metadata));
+  border-color: transparent;
+}
+.token-chips button.metadata-token-chip:hover { box-shadow: inset 0 0 0 1px #50603b45; }
+
+.filename-cell .regex-highlight, .target-name .regex-highlight { border-radius: 0; }
+.filename-cell .regex-highlight:hover, .target-name .regex-highlight:hover { box-shadow: inset 0 -1px #65725370; }
 .capture-key { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin-top: 13px; }
 .capture-key > span { font-size: 10px; color: #747d68; margin-right: 2px; }
 .capture-key button { border: 0; border-radius: 3px; padding: 3px 6px; font-family: var(--mono); font-size: 10px; color: #293329; }
 .capture-key button:hover { box-shadow: inset 0 0 0 1px #50603b45; }
 
 @media (forced-colors: active) {
-  .filename-cell .regex-highlight { color: CanvasText; background: Canvas; text-decoration: underline; }
-  .filename-cell .hl-group { text-decoration-style: double; }
+  .filename-cell .regex-highlight, .target-name .regex-highlight { color: CanvasText; background: Canvas; text-decoration: underline; }
+  .filename-cell .hl-group, .target-name .hl-group { text-decoration-style: double; }
 }

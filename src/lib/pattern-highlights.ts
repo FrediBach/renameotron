@@ -1,4 +1,4 @@
-import type { CaptureGroup, HighlightSpan } from './highlight-types'
+import { metadataHighlight, type CaptureGroup, type HighlightSpan } from './highlight-types'
 
 function decodedGroupName(name: string): string {
   return name.replace(/\\u(?:\{([\da-fA-F]+)\}|([\da-fA-F]{4}))/g, (original, braced: string | undefined, fixed: string | undefined) => {
@@ -84,7 +84,8 @@ export function tokenizeReplacement(replacement: string, groups: CaptureGroup[])
     const token = match[0]
     const start = match.index
     if (token.startsWith('{')) {
-      spans.push({ start, end: start + token.length, kind: 'metadata', label: `Metadata: ${token.replace(/[{}]/g, '')}` })
+      const key = token.match(/^\{([a-zA-Z][\w-]*)/)?.[1]
+      spans.push({ start, end: start + token.length, ...(key ? metadataHighlight(key) : { kind: 'metadata' as const }), label: `Metadata: ${token.replace(/[{}]/g, '')}` })
       continue
     }
     if (token === '$&') {

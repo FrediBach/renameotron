@@ -39,6 +39,13 @@ function sourceFilename(name: string, path = name) {
   return source
 }
 
+function targetFilename(name: string) {
+  const row = screen.getByRole('checkbox', { name: `Select ${name}` }).closest('tr')
+  const target = row?.querySelector<HTMLElement>('.target-name')
+  if (!target) throw new Error(`No target filename found for ${name}`)
+  return target
+}
+
 function patternHighlight(input: HTMLElement) {
   const highlight = input.parentElement?.querySelector('.pattern-highlight')
   if (!highlight) throw new Error('No syntax highlighting found for pattern input')
@@ -56,8 +63,8 @@ describe('renameotron workspace', () => {
 
     expect(screen.getByRole('heading', { name: 'Studio selects' })).toBeTruthy()
     expect(screen.getAllByRole('row')).toHaveLength(13)
-    expect(fileRow('IMG_1042.jpg').getByText('studio-001.jpg')).toBeTruthy()
-    expect(fileRow('IMG_1049.jpg').getByText('studio-008.jpg')).toBeTruthy()
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('studio-001.jpg')
+    expect(targetFilename('IMG_1049.jpg').textContent).toBe('studio-008.jpg')
     expect(fileRow('shoot-notes.md').getByText('No match')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Rename 8 files' })).toHaveProperty('disabled', false)
   })
@@ -84,12 +91,76 @@ describe('renameotron workspace', () => {
     expect(replacement.querySelector('[data-capture-group="2"]')?.textContent).toBe('$2')
     expect(replacement.querySelector('.hl-match')?.textContent).toBe('$&')
     expect(replacement.querySelector('.hl-metadata')?.textContent).toBe('{ext}')
-    expect(fileRow('IMG_1042.jpg').getByText('1042-jpg-IMG_1042.jpg-jpg')).toBeTruthy()
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('1042-jpg-IMG_1042.jpg-jpg')
 
     await replaceInput(user, screen.getByRole('textbox', { name: 'Find a pattern' }), '^IMG_\\d+\\.(jpg|png)$')
     expect(source.querySelector('[data-capture-group="1"]')?.textContent).toBe('jpg')
     expect(source.querySelector('[data-capture-group="2"]')).toBeNull()
     expect(replacement.querySelector('[data-capture-group="2"]')).toBeNull()
+  })
+
+  it('uses matching token colors for formatted metadata in the new name pattern and preview', () => {
+    render(<App />)
+
+    const pattern = patternHighlight(replacementInput())
+    const target = targetFilename('IMG_1042.jpg')
+    expect(target.textContent).toBe('studio-001.jpg')
+    for (const [token, expression, value] of [['index', '{index:3}', '001'], ['ext', '{ext}', 'jpg']]) {
+      const patternToken = pattern.querySelector(`[data-metadata-token="${token}"]`)
+      const resultToken = target.querySelector(`[data-metadata-token="${token}"]`)
+      expect(patternToken?.textContent).toBe(expression)
+      expect(resultToken?.textContent).toBe(value)
+      expect(patternToken?.classList.contains(`hl-token-${token}`)).toBe(true)
+      expect(resultToken?.classList.contains(`hl-token-${token}`)).toBe(true)
+      expect(resultToken?.classList.contains('hl-metadata')).toBe(true)
+    }
+    expect(Array.from(target.querySelectorAll('mark'), mark => mark.textContent)).toEqual(['001', 'jpg'])
+    expect(targetFilename('IMG_1049.jpg').querySelector('[data-metadata-token="index"]')?.textContent).toBe('008')
+    expect(targetFilename('shoot-notes.md').querySelector('mark')).toBeNull()
+  })
+
+  it('tracks repeated metadata tokens and leaves identical literal text unhighlighted during live edits', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await replaceInput(user, replacementInput(), 'jpg-{ext}.jpg-{ext}')
+    const target = targetFilename('IMG_1042.jpg')
+    expect(target.textContent).toBe('jpg-jpg.jpg-jpg')
+    expect(Array.from(target.querySelectorAll('mark'), mark => mark.textContent)).toEqual(['jpg', 'jpg'])
+    expect(target.querySelectorAll('.hl-token-ext[data-metadata-token="ext"]')).toHaveLength(2)
+    expect(patternHighlight(replacementInput()).querySelectorAll('.hl-token-ext[data-metadata-token="ext"]')).toHaveLength(2)
+    expect(Array.from(target.childNodes, node => node.nodeType === Node.TEXT_NODE ? node.textContent : '').join('')).toBe('jpg-.jpg-')
+
+    await replaceInput(user, replacementInput(), '{name}.{ext}')
+    expect(target.textContent).toBe('IMG_1042.jpg')
+    expect(target.querySelector('.hl-token-name[data-metadata-token="name"]')?.textContent).toBe('IMG_1042')
+    expect(target.querySelectorAll('.hl-token-ext[data-metadata-token="ext"]')).toHaveLength(1)
+    expect(target.querySelector('[data-metadata-token="index"]')).toBeNull()
+
+    await replaceInput(user, replacementInput(), 'literal.jpg')
+    expect(target.textContent).toBe('literal.jpg')
+    expect(target.querySelector('mark')).toBeNull()
+  })
+
+  it('keeps capture and metadata highlights aligned when selection and view filters change', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await replaceInput(user, replacementInput(), '$1-{index:2}.{ext}')
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('1042-01.jpg')
+    expect(targetFilename('IMG_1042.jpg').querySelector('[data-capture-group="1"]')?.textContent).toBe('1042')
+    await user.click(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }))
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('Excluded')
+    expect(targetFilename('IMG_1042.jpg').querySelector('mark')).toBeNull()
+    expect(targetFilename('IMG_1043.jpg').querySelector('[data-metadata-token="index"]')?.textContent).toBe('01')
+
+    await user.click(screen.getByRole('button', { name: /^Matched/ }))
+    await user.type(screen.getByRole('textbox', { name: 'Search files' }), '1045')
+    const target = targetFilename('IMG_1045.jpg')
+    expect(target.textContent).toBe('1045-03.jpg')
+    expect(target.querySelector('[data-capture-group="1"]')?.textContent).toBe('1045')
+    expect(target.querySelector('.hl-token-index[data-metadata-token="index"]')?.textContent).toBe('03')
+    expect(target.querySelector('.hl-token-ext[data-metadata-token="ext"]')?.textContent).toBe('jpg')
   })
 
   it('updates filename highlights immediately and clears them for exclusions or invalid expressions', async () => {
@@ -138,8 +209,8 @@ describe('renameotron workspace', () => {
     render(<App />)
 
     await replaceInput(user, replacementInput(), 'archive-$1.{ext}')
-    expect(fileRow('IMG_1042.jpg').getByText('archive-1042.jpg')).toBeTruthy()
-    expect(fileRow('IMG_1049.jpg').getByText('archive-1049.jpg')).toBeTruthy()
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('archive-1042.jpg')
+    expect(targetFilename('IMG_1049.jpg').textContent).toBe('archive-1049.jpg')
 
     await replaceInput(user, replacementInput(), 'same.jpg')
     expect(screen.getAllByText('Multiple files would have the same destination.')).toHaveLength(8)
@@ -162,7 +233,7 @@ describe('renameotron workspace', () => {
 
     await user.click(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }))
     expect(fileRow('IMG_1042.jpg').getByText('Excluded')).toBeTruthy()
-    expect(fileRow('IMG_1043.jpg').getByText('studio-001.jpg')).toBeTruthy()
+    expect(targetFilename('IMG_1043.jpg').textContent).toBe('studio-001.jpg')
 
     await user.click(screen.getByRole('button', { name: /^Matched/ }))
     expect(screen.getAllByRole('row')).toHaveLength(8)
@@ -170,7 +241,7 @@ describe('renameotron workspace', () => {
 
     await user.type(screen.getByRole('textbox', { name: 'Search files' }), '1045')
     expect(screen.getAllByRole('row')).toHaveLength(2)
-    expect(fileRow('IMG_1045.jpg').getByText('studio-003.jpg')).toBeTruthy()
+    expect(targetFilename('IMG_1045.jpg').textContent).toBe('studio-003.jpg')
     expect(screen.getByRole('button', { name: 'Rename 7 files' })).toHaveProperty('disabled', false)
 
     await user.click(screen.getByRole('button', { name: 'Clear search' }))
@@ -205,7 +276,7 @@ describe('renameotron workspace', () => {
     expect(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }).getAttribute('aria-checked')).toBe('false')
     expect(fileRow('IMG_1042.jpg').getByText('Excluded')).toBeTruthy()
     expect(screen.getByRole('checkbox', { name: 'Select IMG_1050.jpg' }).getAttribute('aria-checked')).toBe('true')
-    expect(fileRow('IMG_1050.jpg').getByText('nested/studio-008.jpg')).toBeTruthy()
+    expect(targetFilename('IMG_1050.jpg').textContent).toBe('nested/studio-008.jpg')
     const nestedSource = sourceFilename('IMG_1050.jpg', 'nested/IMG_1050.jpg')
     expect(nestedSource.textContent).toBe('nested/IMG_1050.jpg')
     expect(nestedSource.querySelector('[data-capture-group="1"]')?.textContent).toBe('1050')
@@ -236,7 +307,7 @@ describe('renameotron workspace', () => {
     await user.click(screen.getByRole('button', { name: 'Undo' }))
     expect(screen.getByRole('status').textContent).toContain('Demo rename undone.')
     expect(fileRow('IMG_1042.jpg').getByText('Excluded')).toBeTruthy()
-    expect(fileRow('IMG_1043.jpg').getByText('studio-001.jpg')).toBeTruthy()
+    expect(targetFilename('IMG_1043.jpg').textContent).toBe('studio-001.jpg')
     expect(screen.getByRole('button', { name: 'Rename 7 files' })).toHaveProperty('disabled', false)
   })
 
@@ -249,8 +320,8 @@ describe('renameotron workspace', () => {
     await user.type(within(dialog).getByRole('textbox', { name: 'Search templates' }), 'Folders by extension')
     await user.click(within(dialog).getByRole('button', { name: /Folders by extension/ }))
     expect(replacementInput().value).toBe('{ext}/{name}.{ext}')
-    expect(fileRow('IMG_1042.jpg').getByText('jpg/IMG_1042.jpg')).toBeTruthy()
-    expect(fileRow('shoot-notes.md').getByText('md/shoot-notes.md')).toBeTruthy()
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('jpg/IMG_1042.jpg')
+    expect(targetFilename('shoot-notes.md').textContent).toBe('md/shoot-notes.md')
 
     await user.click(screen.getByRole('button', { name: 'Save as a template' }))
     dialog = screen.getByRole('dialog', { name: 'Save your naming rule.' })
@@ -282,8 +353,8 @@ describe('renameotron workspace', () => {
     expect(screen.queryByRole('listbox')).toBeNull()
 
     await user.paste('.{ext}')
-    expect(fileRow('IMG_1042.jpg').getByText('001.jpg')).toBeTruthy()
-    expect(fileRow('IMG_1049.jpg').getByText('008.jpg')).toBeTruthy()
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('001.jpg')
+    expect(targetFilename('IMG_1049.jpg').textContent).toBe('008.jpg')
   })
 
   it('explains unavailable folder access and keeps the demo usable', async () => {

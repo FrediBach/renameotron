@@ -1,3 +1,6 @@
+import type { HighlightSpan } from './highlight-types'
+import { expandReplacementMetadata, getReplacementOutputHighlights } from './replacement-output'
+
 export interface FileEntry {
   id: string
   name: string
@@ -14,6 +17,8 @@ export interface FileEntry {
 export interface RenameRow {
   file: FileEntry
   targetPath: string
+  /** Generated portions of targetPath, including any preserved parent offset. */
+  targetHighlights?: HighlightSpan[]
   status: 'ready' | 'unmatched' | 'unchanged' | 'error'
   error?: string
 }
@@ -171,23 +176,25 @@ export function buildRenamePlan(
     if (!regex.test(file.name)) return row
     matchedCount++
     let targetPath = file.path
+    let targetHighlights: HighlightSpan[] | undefined
     try {
       // Resolve tokens before captures so braces in source names stay literal.
       // Escape $ inside metadata to keep it out of the replacement grammar.
-      const expanded = replacement.replace(/\{([a-zA-Z][\w-]*)(?::([^{}]*))?\}/g, (_token, key: string, format: string | undefined) => {
-        return resolveToken(file, key, format, matchedCount).split('$').join('$$')
-      })
+      const expanded = expandReplacementMetadata(replacement, (key, format) => resolveToken(file, key, format, matchedCount))
       regex.lastIndex = 0
-      const targetName = file.name.replace(regex, expanded)
+      const targetName = file.name.replace(regex, expanded.text)
       if (!targetName) throw new Error('The new file name is empty.')
       const parent = file.path.includes('/') ? file.path.slice(0, file.path.lastIndexOf('/') + 1) : ''
       targetPath = targetName.includes('/') ? targetName : `${parent}${targetName}`
-      if (targetPath === file.path) return { file, targetPath, status: 'unchanged' }
+      const parentOffset = targetName.includes('/') ? 0 : parent.length
+      targetHighlights = getReplacementOutputHighlights(file.name, regex, expanded, targetName)
+        .map(span => ({ ...span, start: span.start + parentOffset, end: span.end + parentOffset }))
+      if (targetPath === file.path) return { file, targetPath, targetHighlights, status: 'unchanged' }
       const pathError = validateTargetPath(targetPath)
       if (pathError) throw new Error(pathError)
-      return { file, targetPath, status: 'ready' }
+      return { file, targetPath, targetHighlights, status: 'ready' }
     } catch (error) {
-      return { file, targetPath, status: 'error', error: error instanceof Error ? error.message : 'Could not build this file name.' }
+      return { file, targetPath, targetHighlights, status: 'error', error: error instanceof Error ? error.message : 'Could not build this file name.' }
     }
   })
 
