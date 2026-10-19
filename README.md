@@ -22,7 +22,7 @@ This repository is a local POC. It has not been deployed or connected to the ren
 
 ## What works
 
-- Live from/to preview, filename search, match filtering, and individual file selection.
+- Live from/to preview with configurable metadata columns, per-column sorting, combined column filters, global metadata search, and individual file selection.
 - Regex101-inspired background highlighting for regex syntax, replacement references, and matched filename portions. Capture groups keep the same color across both editors and the preview, using exact regex match indices, including nested and global matches.
 - Replacement metadata tokens share their background colors with the values they generate in the new-name preview (for example, `{ext}` and `jpg`). Literal text stays plain, even when it equals a metadata value.
 - Keyboard metadata autocomplete and capture groups (`$1`, `$2`, `$&`, named captures); click a colored group chip to insert its reference into the replacement.
@@ -34,7 +34,15 @@ This repository is a local POC. It has not been deployed or connected to the ren
 - Explicit review before applying native rename or copy-and-delete, with partial-result reporting and downloadable session receipts.
 - Responsive layout, keyboard navigation, reduced-motion support, accessible Radix dialogs, checkboxes, and switches.
 
-No files are uploaded. There is no server, analytics, or runtime third-party network dependency. Custom naming rules are saved to local storage; file handles and rename history remain in memory.
+No files are uploaded. There is no server, analytics, or runtime third-party network dependency. Custom naming rules and preview column preferences are saved to local storage; file handles and rename history remain in memory.
+
+## Preview columns and search
+
+Use **Columns** to add or remove any supported metadata field, including calculated image details, sequence numbers, and extra fields available in a file's metadata. Move columns left or right in the picker. Column choices, order, widths, and sorting are remembered in this browser; **Reset columns** restores From, To, and Size.
+
+Drag a header edge to resize it, or focus the edge and use the arrow keys (Shift for larger steps). Double-click an edge to restore its default width. Click any column heading to cycle through ascending, descending, and original order. Numbers and dates sort by value; missing metadata stays last. Sorting and searching change only the view, so rename sequence numbers and destinations remain stable.
+
+The search box checks names and all available metadata, including hidden columns. Turn on **Filters** to enter a different search in each visible column, for example Camera contains `Fujifilm` and From contains `1045`. Searches ignore case, and a file must match every active filter as well as the global search. Collapsing the filters keeps them active; removing a column clears its filter. **Clear filters** restores the full view. The header checkbox selects or deselects only the visible files; renaming still applies to all selected matches, including those outside the current search.
 
 ## Naming rules
 
@@ -124,5 +132,7 @@ API references: [Chrome File System Access guide](https://developer.chrome.com/d
 - `src/lib/templates.ts` — curated template library and categories
 - `src/lib/template-search.ts` — search across templates, metadata, and modifiers
 - `src/components/TemplateLibrary.tsx` — grouped, searchable template picker
+- `src/components/PreviewTable.tsx` — column management, resizing, and table controls
+- `src/lib/preview-table.ts` — metadata column values, filtering, and stable sorting
 
 The `@/` alias and `components.json` are configured for adding further shadcn components.

@@ -133,7 +133,7 @@ describe('renameotron workspace', () => {
 
     await user.click(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }))
     await user.click(screen.getByRole('button', { name: /^Matched/ }))
-    await user.type(screen.getByRole('textbox', { name: 'Search files' }), '1045')
+    await user.type(screen.getByRole('textbox', { name: 'Search files' }), 'IMG_1045.jpg')
     await user.click(screen.getByRole('button', { name: 'View metadata for IMG_1045.jpg' }))
     expect(within(screen.getByRole('dialog')).getByText('003')).toBeTruthy()
     await user.keyboard('{Escape}')
@@ -262,7 +262,7 @@ describe('renameotron workspace', () => {
     expect(targetFilename('IMG_1043.jpg').querySelector('[data-metadata-token="index"]')?.textContent).toBe('01')
 
     await user.click(screen.getByRole('button', { name: /^Matched/ }))
-    await user.type(screen.getByRole('textbox', { name: 'Search files' }), '1045')
+    await user.type(screen.getByRole('textbox', { name: 'Search files' }), 'IMG_1045.jpg')
     const target = targetFilename('IMG_1045.jpg')
     expect(target.textContent).toBe('1045-03.jpg')
     expect(target.querySelector('[data-capture-group="1"]')?.textContent).toBe('1045')
@@ -346,7 +346,7 @@ describe('renameotron workspace', () => {
     expect(screen.getAllByRole('row')).toHaveLength(8)
     expect(screen.queryByRole('checkbox', { name: 'Select IMG_1042.jpg' })).toBeNull()
 
-    await user.type(screen.getByRole('textbox', { name: 'Search files' }), '1045')
+    await user.type(screen.getByRole('textbox', { name: 'Search files' }), 'IMG_1045.jpg')
     expect(screen.getAllByRole('row')).toHaveLength(2)
     expect(targetFilename('IMG_1045.jpg').textContent).toBe('studio-003.jpg')
     expect(screen.getByRole('button', { name: 'Rename 7 files' })).toHaveProperty('disabled', false)
