@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import { TOKEN_DEFINITIONS } from '../lib/rename'
 import type { CaptureGroup } from '@/lib/highlight-types'
 import { tokenizeRegex, tokenizeReplacement } from '@/lib/pattern-highlights'
@@ -13,15 +13,17 @@ export interface PatternInputProps {
   placeholder?: string
   invalid?: boolean
   captureGroups?: CaptureGroup[]
+  inputRef?: RefObject<HTMLInputElement | null>
 }
 
 function tokenKey(key: string) {
   return key.replace(/^\{/, '').replace(/\}$/, '')
 }
 
-export function PatternInput({ id, value, onChange, kind, placeholder, invalid = false, captureGroups = [] }: PatternInputProps) {
+export function PatternInput({ id, value, onChange, kind, placeholder, invalid = false, captureGroups = [], inputRef: externalInputRef }: PatternInputProps) {
   const highlights = useMemo(() => kind === 'regex' ? tokenizeRegex(value).spans : tokenizeReplacement(value, captureGroups), [value, kind, captureGroups])
-  const inputRef = useRef<HTMLInputElement>(null)
+  const localInputRef = useRef<HTMLInputElement>(null)
+  const inputRef = externalInputRef ?? localInputRef
   const highlightRef = useRef<HTMLPreElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const [focused, setFocused] = useState(false)

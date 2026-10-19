@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowRight, ArrowUpRight, Check, CheckCheck, ChevronDown, CircleHelp, Copy, File, FileImage, FileText, Folder, FolderOpen, History, Image, Layers3, LoaderCircle, LockKeyhole, Plus, RotateCcw, Search, SlidersHorizontal, Sparkles, WandSparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { PatternInput } from '@/components/PatternInput'
 import { MatchedFilename } from '@/components/MatchedFilename'
 import { HighlightedText } from '@/components/HighlightedText'
+import { FileMetadataDialog } from '@/components/FileMetadataDialog'
 import { compileHighlightRegex } from '@/lib/match-highlights'
 import { captureLabel, tokenizeRegex } from '@/lib/pattern-highlights'
 import { buildRenamePlan, formatBytes, TOKEN_DEFINITIONS, type FileEntry } from '@/lib/rename'
@@ -46,7 +47,11 @@ export default function App() {
   const [notice, setNotice] = useState<{ message: string; error?: boolean } | null>(null)
   const [filter, setFilter] = useState<'all' | 'matched'>('all')
   const [search, setSearch] = useState('')
-  const [modal, setModal] = useState<'templates' | 'guide' | 'confirm' | 'history' | 'save' | null>(null)
+  const [modal, setModal] = useState<'templates' | 'guide' | 'confirm' | 'history' | 'save' | 'metadata' | null>(null)
+  const [inspectedFileId, setInspectedFileId] = useState<string | null>(null)
+  const metadataOpener = useRef<HTMLButtonElement | null>(null)
+  const replacementInput = useRef<HTMLInputElement>(null)
+  const focusReplacement = useRef(false)
   const [templateSearch, setTemplateSearch] = useState('')
   const [templateCategory, setTemplateCategory] = useState('All')
   const [savedTemplates, setSavedTemplates] = useState<RenameTemplate[]>(readSavedTemplates)
@@ -62,6 +67,8 @@ export default function App() {
   const highlightRegex = useMemo(() => compileHighlightRegex(pattern, flags), [pattern, flags])
   const captureGroups = useMemo(() => tokenizeRegex(pattern).groups, [pattern])
   const visibleRows = plan.rows.filter(row => (filter === 'all' || row.status !== 'unmatched') && `${row.file.path} ${row.targetPath}`.toLowerCase().includes(search.toLowerCase()))
+  const inspectedFile = files.find(file => file.id === inspectedFileId)
+  const inspectedIndex = plan.rows.filter(row => row.status !== 'unmatched').findIndex(row => row.file.id === inspectedFileId) + 1
   const totalSize = files.reduce((size, file) => size + file.size, 0)
   const allSelected = files.length > 0 && selectedIds.size === files.length
   const canRename = plan.readyCount > 0 && plan.errorCount === 0 && !plan.error && !busy
@@ -88,6 +95,7 @@ export default function App() {
     setFiles(next)
     setSelectedIds(current => new Set(next.filter(file => !preserveSelection || !previousIds.has(file.id) || current.has(file.id)).map(file => file.id)))
     setSearch('')
+    setInspectedFileId(null)
   }
 
   async function openFolder() {
@@ -112,6 +120,13 @@ export default function App() {
 
   function toggleFile(id: string) {
     setSelectedIds(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next })
+  }
+
+  function inspectFile(file: FileEntry, opener: HTMLButtonElement | null) {
+    metadataOpener.current = opener
+    focusReplacement.current = false
+    setInspectedFileId(file.id)
+    setModal('metadata')
   }
 
   function applyTemplate(template: RenameTemplate) {
@@ -191,7 +206,7 @@ export default function App() {
             </div>
             <div className="step-connector"><ArrowDown size={15} /></div>
             <div className="rule-step"><div className="step-label"><span className="step-number">02</span><label htmlFor="replacement-pattern">Give it a new name</label></div>
-              <PatternInput id="replacement-pattern" value={replacement} onChange={value => { setReplacement(value); setActiveTemplate('Custom rule') }} kind="replacement" captureGroups={captureGroups} placeholder="e.g. photo-{index:3}.{ext}" />
+              <PatternInput id="replacement-pattern" inputRef={replacementInput} value={replacement} onChange={value => { setReplacement(value); setActiveTemplate('Custom rule') }} kind="replacement" captureGroups={captureGroups} placeholder="e.g. photo-{index:3}.{ext}" />
               <p className="field-hint">Add text, capture groups, or a little metadata.</p>
               <div className="token-chips">{['{name}', '{ext}', '{index:3}'].map(token => <button key={token} className={`metadata-token-chip hl-token-${token.slice(1, -1).split(':')[0]}`} onClick={() => { setReplacement(current => current + token); setActiveTemplate('Custom rule') }}>{token}</button>)}<button className={showTokens ? 'token-more active' : 'token-more'} onClick={() => setShowTokens(!showTokens)} aria-label="More metadata tokens" aria-expanded={showTokens}><Plus size={13} /></button></div>
               {showTokens && <div className="token-browser">{TOKEN_DEFINITIONS.map(token => <button key={token.key} onClick={() => { setReplacement(current => current + token.example); setActiveTemplate('Custom rule') }}><code>{token.example}</code><span>{token.label}</span></button>)}</div>}
@@ -209,10 +224,32 @@ export default function App() {
         <section className="preview-panel" aria-label="Live rename preview" aria-busy={busy}>
           <div className="preview-heading"><div><h2>The preview</h2><span className="live-badge"><span className="status-dot" />LIVE</span></div><button className="activity-button" onClick={() => setModal('history')} aria-label="Rename activity"><History size={16} /><span>Activity</span>{history.length > 0 && <span className="activity-count">{history.length}</span>}</button></div>
           <div className="preview-toolbar"><div className="view-tabs" aria-label="Filter files"><button className={filter === 'all' ? 'active' : ''} onClick={() => setFilter('all')}>All files<span>{files.length}</span></button><button className={filter === 'matched' ? 'active' : ''} onClick={() => setFilter('matched')}>Matched<span>{plan.matchedCount}</span></button></div><div className="file-search"><Search size={14} /><input aria-label="Search files" placeholder="Find a file…" value={search} onChange={event => setSearch(event.target.value)} />{search && <button onClick={() => setSearch('')} aria-label="Clear search"><X size={12} /></button>}</div></div>
-          <div className="file-table-scroll" role="region" aria-label="File rename preview" tabIndex={0}><table className="file-table"><thead><tr><th className="check-cell"><Checkbox aria-label="Select all files" checked={allSelected ? true : selectedIds.size ? 'indeterminate' : false} onCheckedChange={checked => setSelectedIds(checked ? new Set(files.map(file => file.id)) : new Set())} /></th><th>FROM <ChevronDown size={11} /></th><th className="arrow-cell" /><th>TO</th><th className="size-cell">SIZE</th><th className="status-cell" /></tr></thead><tbody>{visibleRows.map(row => <tr key={row.file.id} className={`${row.status === 'unmatched' ? 'unmatched-row' : ''} ${row.status === 'error' ? 'error-row' : ''}`}><td className="check-cell"><Checkbox aria-label={`Select ${row.file.name}`} checked={selectedIds.has(row.file.id)} onCheckedChange={() => toggleFile(row.file.id)} /></td><td><div className="filename-cell"><FileIcon file={row.file} /><MatchedFilename file={row.file} regex={highlightRegex} enabled={row.status !== 'unmatched'} /></div></td><td className="arrow-cell"><ArrowRight size={13} /></td><td><span className={`target-name ${row.status === 'ready' ? 'will-rename' : ''}`} title={row.error ?? row.targetPath}>{row.status === 'unmatched' ? <span className="no-match">{selectedIds.has(row.file.id) ? 'No match' : 'Excluded'}</span> : <HighlightedText text={row.targetPath} spans={row.targetHighlights ?? []} />}</span>{row.status === 'error' && <small className="row-error">{row.error}</small>}</td><td className="size-cell">{formatBytes(row.file.size)}</td><td className="status-cell">{row.status === 'ready' && <span className="ready-dot" title="Ready to rename" />}{row.status === 'error' && <span className="error-mark" title={row.error}>!</span>}{row.status === 'unchanged' && <Check size={12} />}</td></tr>)}</tbody></table>
+          <div className="file-table-scroll" role="region" aria-label="File rename preview" tabIndex={0}>
+            <table className="file-table">
+              <thead><tr><th className="check-cell"><Checkbox aria-label="Select all files" checked={allSelected ? true : selectedIds.size ? 'indeterminate' : false} onCheckedChange={checked => setSelectedIds(checked ? new Set(files.map(file => file.id)) : new Set())} /></th><th>FROM <ChevronDown size={11} /></th><th className="arrow-cell" /><th>TO</th><th className="size-cell">SIZE</th><th className="status-cell" /></tr></thead>
+              <tbody>{visibleRows.map(row => <tr
+                key={row.file.id}
+                className={`file-row ${row.status === 'unmatched' ? 'unmatched-row' : ''} ${row.status === 'error' ? 'error-row' : ''}`}
+                onClick={event => inspectFile(row.file, event.currentTarget.querySelector<HTMLButtonElement>('.filename-cell'))}
+              >
+                <td className="check-cell" onClick={event => event.stopPropagation()}><Checkbox aria-label={`Select ${row.file.name}`} checked={selectedIds.has(row.file.id)} onCheckedChange={() => toggleFile(row.file.id)} /></td>
+                <td><button
+                  type="button"
+                  className="filename-cell"
+                  aria-label={`View metadata for ${row.file.path}`}
+                  aria-haspopup="dialog"
+                  title="View file metadata and name patterns"
+                  onClick={event => { event.stopPropagation(); inspectFile(row.file, event.currentTarget) }}
+                ><FileIcon file={row.file} /><MatchedFilename file={row.file} regex={highlightRegex} enabled={row.status !== 'unmatched'} /></button></td>
+                <td className="arrow-cell"><ArrowRight size={13} /></td>
+                <td><span className={`target-name ${row.status === 'ready' ? 'will-rename' : ''}`} title={row.error ?? row.targetPath}>{row.status === 'unmatched' ? <span className="no-match">{selectedIds.has(row.file.id) ? 'No match' : 'Excluded'}</span> : <HighlightedText text={row.targetPath} spans={row.targetHighlights ?? []} />}</span>{row.status === 'error' && <small className="row-error">{row.error}</small>}</td>
+                <td className="size-cell">{formatBytes(row.file.size)}</td>
+                <td className="status-cell">{row.status === 'ready' && <span className="ready-dot" title="Ready to rename" />}{row.status === 'error' && <span className="error-mark" title={row.error}>!</span>}{row.status === 'unchanged' && <Check size={12} />}</td>
+              </tr>)}</tbody>
+            </table>
             {visibleRows.length === 0 && <div className="empty-state"><Search size={25} /><h3>{files.length === 0 ? 'A clean slate.' : 'No files in this view.'}</h3><p>{files.length === 0 ? 'Open a folder with a few files to get started.' : 'Try another pattern or clear your search.'}</p>{(search || filter === 'matched') && <Button variant="outline" size="sm" onClick={() => { setSearch(''); setFilter('all') }}>Show all files</Button>}</div>}
           </div>
-          <div className="preview-legend"><span><span className="ready-dot" />{plan.readyCount} will be renamed</span><span><span className="neutral-dot" />{files.length - plan.readyCount - plan.errorCount} unchanged</span>{plan.errorCount > 0 && <span className="error-text">{plan.errorCount} conflicts</span>}<span className="sort-note">Updates as you type</span></div>
+          <div className="preview-legend"><span><span className="ready-dot" />{plan.readyCount} will be renamed</span><span><span className="neutral-dot" />{files.length - plan.readyCount - plan.errorCount} unchanged</span>{plan.errorCount > 0 && <span className="error-text">{plan.errorCount} conflicts</span>}<span className="metadata-row-hint">Click a row for metadata</span></div>
           <div className="rename-action"><div><span className="action-icon"><CheckCheck size={19} /></span><div><strong>{busy ? progress : plan.errorCount ? 'A few names need a second look.' : plan.readyCount ? `${plan.readyCount} files. Ready when you are.` : 'Your files are in good company.'}</strong><p>{demo ? 'Try it out. These are only sample files.' : 'Review the new names before applying changes.'}</p></div></div><Button disabled={!canRename} onClick={() => setModal('confirm')}>{busy ? <LoaderCircle size={15} className="spin" /> : null}Rename {plan.readyCount} files<ArrowRight size={16} /></Button></div>
         </section>
       </div>
@@ -223,6 +260,27 @@ export default function App() {
     <footer className="site-footer"><span>Less, but better named.</span><span>RENAMEOTRON <span className="footer-slash">/</span> V.01</span></footer>
 
     {notice && <div className={`toast ${notice.error ? 'toast-error' : ''}`} role={notice.error ? 'alert' : 'status'}><span>{notice.error ? <CircleHelp size={18} /> : <Check size={18} />}</span><p>{notice.message}</p>{demoUndo && !notice.error && <button onClick={() => { loadFiles(demoUndo, true); setDemoUndo(null); setNotice({ message: 'Demo rename undone.' }) }}>Undo</button>}<button aria-label="Dismiss notification" onClick={() => setNotice(null)}><X size={16} /></button></div>}
+
+    <FileMetadataDialog
+      file={inspectedFile}
+      index={inspectedIndex || undefined}
+      open={modal === 'metadata'}
+      onOpenChange={open => !open && setModal(null)}
+      onInsert={token => {
+        setReplacement(current => current + token)
+        setActiveTemplate('Custom rule')
+        focusReplacement.current = true
+        setModal(null)
+      }}
+      onCloseAutoFocus={event => {
+        event.preventDefault()
+        if (focusReplacement.current) {
+          const input = replacementInput.current
+          input?.focus()
+          input?.setSelectionRange(input.value.length, input.value.length)
+        } else metadataOpener.current?.focus()
+      }}
+    />
 
     <Dialog open={modal === 'templates'} onOpenChange={open => !open && setModal(null)}><DialogContent className="templates-dialog"><p className="eyebrow">SKIP THE BLANK PAGE</p><DialogTitle>A rule for almost everything.</DialogTitle><DialogDescription>Thoughtful starting points. Pick one, then make it yours.</DialogDescription><div className="template-search"><Search size={16} /><input aria-label="Search templates" placeholder="Find a template…" value={templateSearch} onChange={event => setTemplateSearch(event.target.value)} /></div><div className="category-tabs">{templateCategories.map(category => <button className={category === templateCategory ? 'active' : ''} key={category} onClick={() => setTemplateCategory(category)}>{category}</button>)}</div><div className="template-grid">{shownTemplates.map(template => <button key={template.id} onClick={() => applyTemplate(template)}><div><WandSparkles size={19} /><ArrowUpRight size={15} /></div><h3>{template.name}</h3><p>{template.description}</p><code>{template.replacement}</code></button>)}{shownTemplates.length === 0 && <div className="template-empty">{templateCategory === 'Saved' ? 'Your saved naming rules will appear here.' : 'No templates found. Try another search.'}</div>}</div></DialogContent></Dialog>
 

@@ -1,10 +1,36 @@
 import { describe, expect, it } from 'vitest'
-import { buildRenamePlan, formatBytes, type FileEntry } from './rename'
+import { buildRenamePlan, formatBytes, getFileTokenDetails, type FileEntry } from './rename'
 import { TEMPLATES } from './templates'
 
 function file(name: string, overrides: Partial<FileEntry> = {}): FileEntry {
   return { id: name, name, path: name, size: 1280, type: 'image/jpeg', lastModified: Date.UTC(2025, 3, 12, 14, 5, 9), metadata: {}, ...overrides }
 }
+
+describe('file metadata details', () => {
+  it('uses exactly the same token values as the rename preview, including dates and stable UUIDs', () => {
+    const photo = file('photo.jpg', { metadata: { taken: '2026-10-12T10:24:35+02:00', camera: 'Camera $&', width: 6240, height: 4160 } })
+    const details = getFileTokenDetails(photo, 1)
+    for (const token of details) {
+      expect(token.error).toBeUndefined()
+      const plan = buildRenamePlan([photo], '^.+$', `prefix-${token.example}`)
+      expect(plan.rows[0].targetPath).toBe(`prefix-${token.value}`)
+    }
+    expect(details.find(token => token.key === 'taken')).toMatchObject({ value: '2026-10-12', displayValue: '2026-10-12 08:24:35 UTC' })
+    expect(details.find(token => token.key === 'modified')).toMatchObject({ value: '2025-04-12', displayValue: '2025-04-12 14:05:09 UTC' })
+    expect(getFileTokenDetails(photo, 7).find(token => token.key === 'index')?.value).toBe('007')
+  })
+
+  it('distinguishes empty extensions and zero-byte files from unavailable or invalid metadata', () => {
+    const details = getFileTokenDetails(file('README', { size: 0, type: '', lastModified: NaN, metadata: { taken: 'invalid' } }))
+    expect(details.find(token => token.key === 'ext')).toMatchObject({ value: '', displayValue: '' })
+    expect(details.find(token => token.key === 'size')?.value).toBe('0')
+    for (const key of ['type', 'modified', 'taken', 'camera', 'width', 'height', 'index']) {
+      const token = details.find(token => token.key === key)
+      expect(token?.value).toBeUndefined()
+      expect(token?.error).toBeTruthy()
+    }
+  })
+})
 
 describe('buildRenamePlan', () => {
   it('matches filenames, expands captures and metadata, and preserves parents for plain names', () => {

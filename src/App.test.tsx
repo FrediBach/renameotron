@@ -58,6 +58,111 @@ async function replaceInput(user: ReturnType<typeof userEvent.setup>, input: HTM
 }
 
 describe('renameotron workspace', () => {
+  it('opens metadata from the whole row without changing the rename selection', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(targetFilename('IMG_1042.jpg'))
+    const dialog = screen.getByRole('dialog', { name: 'File metadata' })
+    expect(within(dialog).getByText('IMG_1042.jpg')).toBeTruthy()
+    expect(within(dialog).getByText('Fujifilm X100VI')).toBeTruthy()
+    expect(within(dialog).getByText('6240')).toBeTruthy()
+    expect(within(dialog).getByText('4160')).toBeTruthy()
+    expect(within(dialog).getByText('2400000')).toBeTruthy()
+    expect(within(dialog).getByText('image/jpeg')).toBeTruthy()
+    expect(within(dialog).getByText('001')).toBeTruthy()
+    expect(within(dialog).getByRole('button', { name: 'Insert {taken:YYYY-MM-DD}' })).toHaveProperty('disabled', false)
+    expect(within(dialog).getAllByRole('button', { name: /^Insert / })).toHaveLength(11)
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'View metadata for IMG_1042.jpg' }))
+    expect(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Rename 8 files' })).toHaveProperty('disabled', false)
+
+    await user.click(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }).getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('opens metadata with the keyboard and inserts a usable token into the pattern', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await replaceInput(user, replacementInput(), '{name}-')
+    const opener = screen.getByRole('button', { name: 'View metadata for IMG_1042.jpg' })
+    opener.focus()
+    await user.keyboard('{Enter}')
+    await user.click(within(screen.getByRole('dialog', { name: 'File metadata' })).getByRole('button', { name: 'Insert {camera}' }))
+
+    await waitFor(() => expect(document.activeElement).toBe(replacementInput()))
+    expect(replacementInput().value).toBe('{name}-{camera}')
+    expect(replacementInput().selectionStart).toBe('{name}-{camera}'.length)
+    expect(targetFilename('IMG_1042.jpg').textContent).toBe('IMG_1042-Fujifilm X100VI')
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    opener.focus()
+    await user.keyboard(' ')
+    expect(screen.getByRole('dialog', { name: 'File metadata' })).toBeTruthy()
+    await user.keyboard('{Control>}{Enter}{/Control}')
+    expect(screen.getAllByRole('dialog')).toHaveLength(1)
+    expect(screen.getByRole('dialog', { name: 'File metadata' })).toBeTruthy()
+  })
+
+  it('shows unavailable metadata for unmatched files without inventing values', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('button', { name: 'View metadata for shoot-notes.md' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'File metadata' }))
+    expect(dialog.getByText('shoot-notes')).toBeTruthy()
+    expect(dialog.getByText('text/markdown')).toBeTruthy()
+    expect(dialog.getAllByText('Not available')).toHaveLength(5)
+    for (const token of ['{taken:YYYY-MM-DD}', '{camera}', '{width}', '{height}', '{index:3}']) {
+      expect(dialog.getByRole('button', { name: `Insert ${token}` })).toHaveProperty('disabled', true)
+    }
+    expect(dialog.getByRole('button', { name: 'Insert {modified:YYYY-MM-DD}' })).toHaveProperty('disabled', false)
+    expect(dialog.getByText('Select this file and match its name to assign a sequence number.')).toBeTruthy()
+  })
+
+  it('shows sequence numbers from selected matches independently of search filters', async () => {
+    const user = userEvent.setup()
+    render(<App />)
+
+    await user.click(screen.getByRole('checkbox', { name: 'Select IMG_1042.jpg' }))
+    await user.click(screen.getByRole('button', { name: /^Matched/ }))
+    await user.type(screen.getByRole('textbox', { name: 'Search files' }), '1045')
+    await user.click(screen.getByRole('button', { name: 'View metadata for IMG_1045.jpg' }))
+    expect(within(screen.getByRole('dialog')).getByText('003')).toBeTruthy()
+    await user.keyboard('{Escape}')
+
+    await replaceInput(user, screen.getByRole('textbox', { name: 'Find a pattern' }), '[')
+    await user.click(screen.getByRole('button', { name: /^All files/ }))
+    await user.click(screen.getByRole('button', { name: 'View metadata for IMG_1045.jpg' }))
+    const dialog = within(screen.getByRole('dialog'))
+    expect(dialog.getByRole('button', { name: 'Insert {index:3}' })).toHaveProperty('disabled', true)
+    expect(dialog.getByText('Fujifilm X100VI')).toBeTruthy()
+  })
+
+  it('inspects local files with relative paths, empty extensions, and missing MIME types', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(filesystem, 'pickDirectory').mockResolvedValue({ name: 'Local folder' } as FileSystemDirectoryHandle)
+    vi.spyOn(filesystem, 'scanDirectory').mockResolvedValue([{
+      id: 'local-readme', name: 'README', path: 'docs/README', size: 0, type: '', lastModified: Date.UTC(2026, 9, 12, 14, 5, 9), metadata: {},
+    }])
+    render(<App />)
+    await user.click(screen.getByRole('button', { name: 'Open folder' }))
+    await user.click(await screen.findByRole('button', { name: 'View metadata for docs/README' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'File metadata' }))
+    expect(dialog.getByText('docs/README')).toBeTruthy()
+    expect(dialog.getByText('No extension')).toBeTruthy()
+    expect(dialog.getByText('0')).toBeTruthy()
+    expect(dialog.getByText('2026-10-12 14:05:09 UTC')).toBeTruthy()
+    expect(dialog.getByText('2026-10-12')).toBeTruthy()
+    expect(dialog.getByRole('button', { name: 'Insert {ext}' })).toHaveProperty('disabled', false)
+    expect(dialog.getByRole('button', { name: 'Insert {type}' })).toHaveProperty('disabled', true)
+  })
+
   it('opens with a usable demo and the current rename preview', () => {
     render(<App />)
 

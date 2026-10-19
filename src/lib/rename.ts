@@ -119,6 +119,33 @@ function resolveToken(file: FileEntry, key: string, format: string | undefined, 
   throw new Error(`Unknown token {${key}}. Choose a token from the metadata menu.`)
 }
 
+export interface FileTokenDetail extends TokenDefinition {
+  /** Exact output of the example pattern; undefined means unavailable. */
+  value?: string
+  /** Full metadata value when the example formats it (for example, dates). */
+  displayValue?: string
+  error?: string
+}
+
+/** Use the rename engine's resolver so the inspector and preview agree. */
+export function getFileTokenDetails(file: FileEntry, index?: number): FileTokenDetail[] {
+  return TOKEN_DEFINITIONS.map(token => {
+    try {
+      if (token.key === 'index' && index === undefined) {
+        return { ...token, error: 'Select this file and match its name to assign a sequence number.' }
+      }
+      const format = token.example.slice(1, -1).split(':')[1]
+      const value = resolveToken(file, token.key, format, index ?? 1)
+      const displayValue = token.key === 'modified' || token.key === 'taken'
+        ? `${resolveToken(file, token.key, 'YYYY-MM-DD HH:mm:ss', index ?? 1)} UTC`
+        : value
+      return { ...token, value, displayValue }
+    } catch (error) {
+      return { ...token, error: error instanceof Error ? error.message : 'Metadata unavailable.' }
+    }
+  })
+}
+
 /** Validate portable paths before any file-system operation. */
 export function validateTargetPath(path: string): string | undefined {
   if (!path || !path.trim()) return 'The new file name is empty.'

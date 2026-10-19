@@ -29,6 +29,7 @@ This repository is a local POC. It has not been deployed or connected to the ren
 - 22 built-in templates, searchable by category, plus custom templates saved in this browser.
 - Optional recursive scanning, destination subfolder creation, sequences, and stable UUIDs.
 - Basic file metadata and embedded photo EXIF, processed in the browser with `exifr`.
+- Click a file row (or focus its filename and press Enter) to inspect every supported metadata field, its value, and the corresponding naming token. Click an available token to append it to the name pattern. Missing fields are marked; sequence values follow the current selected matches.
 - Explicit review before applying native rename or copy-and-delete, with partial-result reporting and downloadable session receipts.
 - Responsive layout, keyboard navigation, reduced-motion support, accessible Radix dialogs, checkboxes, and switches.
 
