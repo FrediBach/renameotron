@@ -56,6 +56,8 @@ export function PatternInput({ id, value, onChange, kind, placeholder, invalid =
     else if (option.offsetTop + option.offsetHeight > menu.scrollTop + menu.clientHeight) {
       menu.scrollTop = option.offsetTop + option.offsetHeight - menu.clientHeight
     }
+    // Also reveal the active suggestion when the rule pane itself is scrolled.
+    option.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
   }, [isOpen, selectedIndex])
 
   const insertToken = (key: string) => {
